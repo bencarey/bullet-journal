@@ -1,0 +1,1195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Journal</title>
+<style>
+  :root {
+    color-scheme: light;
+    --bg: #fafafa; --surface: #ffffff;
+    --ink: #111111; --ink-2: #444; --ink-3: #888; --ink-4: #c8c8c8;
+    --line: #e8e8e8; --line-strong: #1a1a1a;
+    --accent: #d65427; --accent-soft: #fbeae2; --done: #b0b0b0;
+    --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
+  body { min-height: 100vh; padding: 40px 32px 80px; }
+  .frame { max-width: 880px; margin: 0 auto; }
+
+  .topbar { display: grid; grid-template-columns: 1fr auto; align-items: end; padding-bottom: 22px; border-bottom: 1px solid var(--line-strong); margin-bottom: 30px; }
+  .brand { display: flex; align-items: baseline; gap: 14px; }
+  h1 { font-size: 13px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; outline: none; }
+  h1:focus { color: var(--accent); }
+  .brand-mark { width: 10px; height: 10px; background: var(--accent); }
+  .topbar-meta { display: flex; align-items: center; gap: 18px; font-size: 11px; color: var(--ink-3); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
+  .save-dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ink-4); margin-right: 6px; }
+  .save-dot.dirty { background: var(--accent); }
+  .save-dot.linked { background: #5ba85b; }
+  .save-dot.error { background: #d83b3b; }
+  .file-pill { font-family: var(--mono); }
+
+  nav { display: flex; gap: 28px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 44px; }
+  nav button { background: none; border: none; font: inherit; font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); cursor: pointer; padding: 12px 0; margin-bottom: -1px; border-bottom: 1px solid transparent; transition: color 120ms, border-color 120ms; }
+  nav button:hover { color: var(--ink); }
+  nav button.active { color: var(--ink); border-bottom-color: var(--accent); }
+
+  .view { display: none; }
+  .view.active { display: block; }
+
+  .view-head { display: grid; grid-template-columns: auto 1fr auto; gap: 20px; align-items: end; margin-bottom: 28px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .view-label { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 6px; }
+  .view-title { font-size: 27px; font-weight: 300; letter-spacing: -0.01em; line-height: 1.1; font-variant-numeric: tabular-nums; }
+  .view-summary { font-size: 11px; color: var(--ink-4); letter-spacing: 0.04em; margin-top: 5px; }
+  .done-period { font-size: 10px; color: var(--ink-4); font-family: var(--mono); white-space: nowrap; align-self: center; }
+
+  .pager { display: flex; align-items: center; gap: 4px; }
+  .pager button { background: none; border: 1px solid var(--line); width: 30px; height: 30px; font: inherit; font-size: 13px; color: var(--ink-2); cursor: pointer; }
+  .pager button:hover { border-color: var(--ink); color: var(--ink); }
+  .pager .pager-today { width: auto; padding: 0 11px; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; }
+  .pager input { height: 30px; border: 1px solid var(--line); background: var(--surface); padding: 0 8px; font: inherit; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink); margin-left: 4px; }
+
+  .entry-list { list-style: none; }
+  .entry { display: grid; grid-template-columns: 28px 20px 1fr auto; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); transition: background 100ms; }
+  .entry:hover { background: var(--surface); }
+  .entry .num { font-family: var(--mono); font-size: 10px; color: var(--ink-4); font-variant-numeric: tabular-nums; user-select: none; }
+  .entry .glyph { text-align: center; font-family: var(--mono); font-size: 13px; color: var(--ink); cursor: pointer; user-select: none; line-height: 1; padding-top: 2px; }
+  .entry.task .glyph:hover { color: var(--accent); }
+  .entry .text { font-size: 14px; color: var(--ink); outline: none; word-break: break-word; padding: 1px 2px; margin: -1px -2px; }
+  .entry .text:focus { background: var(--accent-soft); }
+  .entry.done .text { color: var(--done); text-decoration: line-through; text-decoration-thickness: 1px; }
+  .entry.cancelled .text { color: var(--ink-4); text-decoration: line-through; }
+  .entry.migrated .text { color: var(--ink-4); }
+  .entry.migrated .glyph { color: var(--ink-4); }
+  .entry.scheduled .text { color: var(--ink-4); }
+  .entry.scheduled .glyph { color: var(--ink-4); }
+  .entry.dragging { opacity: 0.3; }
+  .entry.drop-above { border-top: 2px solid var(--accent); }
+  .entry.drop-below { border-bottom-color: var(--accent); border-bottom-width: 2px; }
+  .entry[draggable="true"] .num { cursor: grab; }
+  .entry.priority:not(.migrated) { background: #fdf5f0; }
+  .entry.priority:not(.migrated):hover { background: #fbeae2; }
+  .entry.priority .glyph { color: var(--accent); }
+  .entry .actions { display: flex; gap: 12px; opacity: 0; transition: opacity 120ms; }
+  .entry:hover .actions { opacity: 1; }
+  .entry .actions button { background: none; border: none; font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); cursor: pointer; padding: 0; }
+  .entry .actions button:hover { color: var(--accent); }
+  .empty { padding: 22px 0; color: var(--ink-3); font-size: 13px; }
+
+  .composer { display: grid; grid-template-columns: 28px auto 1fr auto; gap: 10px; align-items: center; padding: 14px 0 0; margin-top: 6px; }
+  .composer .spacer { font-family: var(--mono); font-size: 11px; color: var(--ink-4); }
+  .composer select { height: 30px; border: 1px solid var(--line); background: var(--surface); padding: 0 22px 0 10px; font: inherit; font-size: 11px; color: var(--ink); cursor: pointer; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23888' d='M2 4l3 3 3-3z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
+  .composer input[type="text"] { height: 30px; border: none; border-bottom: 1px solid var(--line); background: transparent; padding: 0 4px; font: inherit; font-size: 14px; color: var(--ink); outline: none; }
+  .composer input[type="text"]:focus { border-bottom-color: var(--ink); }
+  .composer input[type="text"]::placeholder { color: var(--ink-4); }
+  .composer button.add { height: 30px; padding: 0 14px; background: var(--ink); color: white; border: none; font: inherit; font-size: 10px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; transition: background 120ms; }
+  .composer button.add:hover { background: var(--accent); }
+
+  .banner { display: flex; justify-content: space-between; align-items: center; gap: 14px; background: var(--accent-soft); border-left: 2px solid var(--accent); padding: 11px 14px; margin-bottom: 20px; font-size: 13px; color: var(--ink-2); }
+  .banner button { background: var(--ink); color: white; border: none; padding: 5px 11px; font: inherit; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+  .banner button:hover { background: var(--accent); }
+
+  .month-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 36px; }
+  @media (max-width: 720px) { .month-grid { grid-template-columns: 1fr; gap: 24px; } }
+  .calendar { display: grid; grid-template-columns: repeat(7, 1fr); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+  .calendar .dow { padding: 6px 8px; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); }
+  .calendar .cell { aspect-ratio: 1; padding: 6px 8px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink-2); cursor: pointer; background: var(--surface); position: relative; transition: background 100ms; }
+  .calendar .cell.empty { cursor: default; background: var(--bg); }
+  .calendar .cell:not(.empty):hover { background: var(--accent-soft); }
+  .calendar .cell.today { color: var(--surface); background: var(--ink); font-weight: 500; }
+  .calendar .cell.today:hover { background: var(--accent); }
+  .calendar .cell .dot { position: absolute; bottom: 6px; right: 6px; width: 4px; height: 4px; background: var(--accent); border-radius: 50%; }
+  .calendar .cell.today .dot { background: white; }
+  .panel-label { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
+
+  .future-grid { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
+  @media (max-width: 720px) { .future-grid { grid-template-columns: 1fr; } }
+  .future-month { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 18px; background: var(--surface); min-height: 170px; }
+  .future-month-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
+  .future-month-name { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink); }
+  .future-month-year { font-size: 9px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
+  .future-month .entry { grid-template-columns: 16px 1fr auto; padding: 6px 0; }
+  .future-month .entry .num { display: none; }
+  .future-month .composer { grid-template-columns: 16px 1fr auto; padding-top: 10px; border-top: 1px dashed var(--line); margin-top: 10px; }
+  .future-month .composer .spacer { display: none; }
+  .future-month .composer select { font-size: 10px; height: 26px; }
+  .future-month .composer input { height: 26px; font-size: 13px; }
+  .future-month .composer button.add { padding: 0 9px; height: 26px; }
+
+  .collections-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 28px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+  .collections-bar select, .collections-bar input { height: 30px; border: 1px solid var(--line); background: var(--surface); padding: 0 10px; font: inherit; font-size: 13px; color: var(--ink); }
+  .collections-bar select { min-width: 170px; cursor: pointer; appearance: none; -webkit-appearance: none; padding-right: 26px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23888' d='M2 4l3 3 3-3z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
+  .collections-bar button { height: 30px; padding: 0 12px; background: var(--ink); color: white; border: none; font: inherit; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+  .collections-bar button:hover { background: var(--accent); }
+  .collections-bar button.ghost { background: transparent; color: var(--ink-3); border: 1px solid var(--line); }
+  .collections-bar button.ghost:hover { color: var(--accent); border-color: var(--accent); }
+
+  .index-section { margin-bottom: 28px; }
+  .index-section-head { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
+  .index-list { list-style: none; }
+  .index-list li { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; padding: 7px 0; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; transition: padding 120ms; }
+  .index-list li:hover { padding-left: 8px; }
+  .index-list li:hover .name { color: var(--accent); }
+  .index-list .name { color: var(--ink); }
+  .index-list .count { color: var(--ink-3); font-family: var(--mono); font-size: 10px; font-variant-numeric: tabular-nums; }
+
+  .key-block { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-bottom: 28px; }
+  .key-row { display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding: 11px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); align-items: center; font-size: 12px; }
+  .key-row .g { font-family: var(--mono); font-size: 13px; color: var(--accent); text-align: center; }
+  .key-desc { color: var(--ink-2); font-size: 13px; line-height: 1.6; max-width: 600px; margin-bottom: 14px; }
+
+  .source-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 14px; flex-wrap: wrap; }
+  .source-toolbar button { height: 28px; padding: 0 11px; background: var(--surface); color: var(--ink-2); border: 1px solid var(--line); font: inherit; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+  .source-toolbar button:hover { color: var(--ink); border-color: var(--ink); }
+  .source-toolbar .pill { font-family: var(--mono); font-size: 10px; color: var(--ink-3); padding: 4px 9px; background: var(--surface); border: 1px solid var(--line); }
+  .source-area { width: 100%; min-height: 60vh; border: 1px solid var(--line); background: var(--surface); padding: 14px; font-family: var(--mono); font-size: 12px; line-height: 1.6; color: var(--ink); resize: vertical; outline: none; white-space: pre; tab-size: 2; }
+  .source-area:focus { border-color: var(--ink); }
+
+  .modal-bg { display: none; position: fixed; inset: 0; background: rgba(17,17,17,0.5); z-index: 100; align-items: center; justify-content: center; }
+  .modal-bg.active { display: flex; }
+  .modal { background: var(--surface); padding: 24px 28px; max-width: 400px; width: 90%; border: 1px solid var(--line-strong); }
+  .modal h3 { font-size: 12px; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; margin-bottom: 10px; }
+  .modal p { color: var(--ink-2); font-size: 14px; margin-bottom: 18px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+  .modal-actions button { height: 30px; padding: 0 13px; border: none; font: inherit; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+  .modal-actions .cancel { background: transparent; color: var(--ink-2); border: 1px solid var(--line); }
+  .modal-actions .cancel:hover { color: var(--ink); border-color: var(--ink); }
+  .modal-actions .confirm { background: var(--accent); color: white; }
+  .modal-actions .confirm:hover { background: var(--ink); }
+
+  .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--ink); color: white; padding: 9px 18px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; transition: transform 200ms ease; z-index: 200; }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+
+  .loading-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); z-index: 1000; font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
+  .loading-overlay.hidden { display: none; }
+
+  .error-banner { position: fixed; top: 0; left: 0; right: 0; background: #d83b3b; color: white; padding: 10px 16px; font-size: 13px; z-index: 300; display: flex; justify-content: space-between; align-items: center; }
+  .error-banner button { background: rgba(255,255,255,0.2); color: white; border: none; padding: 4px 10px; font: inherit; font-size: 11px; letter-spacing: 0.1em; cursor: pointer; }
+
+  ::selection { background: var(--accent); color: white; }
+</style>
+</head>
+<body>
+
+<div class="loading-overlay" id="loading">Loading journal.md…</div>
+
+<div class="frame">
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <h1 id="journalTitle" contenteditable="true" spellcheck="false">JOURNAL</h1>
+    </div>
+    <div class="topbar-meta">
+      <span id="todayStamp"></span>
+      <span class="file-pill">⇄ journal.md</span>
+      <span><span class="save-dot" id="saveDot"></span><span id="saveStatus">Idle</span></span>
+    </div>
+  </header>
+
+  <nav>
+    <button class="nav-btn active" data-view="daily">Daily</button>
+    <button class="nav-btn" data-view="monthly">Monthly</button>
+    <button class="nav-btn" data-view="future">Future</button>
+    <button class="nav-btn" data-view="collections">Collections</button>
+    <button class="nav-btn" data-view="index">Index</button>
+    <button class="nav-btn" data-view="done">Done</button>
+    <button class="nav-btn" data-view="key">Key</button>
+    <button class="nav-btn" data-view="source">Source</button>
+  </nav>
+
+  <section class="view active" id="view-daily">
+    <div class="view-head">
+      <div><div class="view-label">Day</div><div class="view-title" id="dailyLabel"></div><div class="view-summary" id="dailySummary"></div></div>
+      <div></div>
+      <div class="pager">
+        <button id="prevDay">←</button>
+        <button id="todayBtn" class="pager-today">Today</button>
+        <button id="nextDay">→</button>
+        <input type="date" id="datePicker">
+      </div>
+    </div>
+    <div id="migrateBanner"></div>
+    <ul class="entry-list" id="dailyEntries"></ul>
+    <div class="composer">
+      <span class="spacer">+</span>
+      <select id="dailyType">
+        <option value="task">Task ·</option>
+        <option value="event">Event ○</option>
+        <option value="note">Note —</option>
+        <option value="priority">Priority ★</option>
+        <option value="inspiration">Idea !</option>
+      </select>
+      <input type="text" id="dailyInput" placeholder="Add an entry" autocomplete="off">
+      <button class="add" id="dailyAdd">Add</button>
+    </div>
+  </section>
+
+  <section class="view" id="view-monthly">
+    <div class="view-head">
+      <div><div class="view-label">Month</div><div class="view-title" id="monthlyLabel"></div></div>
+      <div></div>
+      <div class="pager">
+        <button id="prevMonth">←</button>
+        <button id="nextMonth">→</button>
+        <input type="month" id="monthPicker">
+      </div>
+    </div>
+    <div class="month-grid">
+      <div>
+        <div class="panel-label">Calendar</div>
+        <div class="calendar" id="calendarGrid"></div>
+      </div>
+      <div>
+        <div class="panel-label">Log</div>
+        <ul class="entry-list" id="monthlyEntries"></ul>
+        <div id="monthlyFutureSection" style="display:none">
+          <div class="panel-label" style="margin-top:20px;color:var(--ink-4)">From Future Log</div>
+          <ul class="entry-list" id="monthlyFutureEntries"></ul>
+        </div>
+        <div class="composer">
+          <span class="spacer">+</span>
+          <select id="monthlyType">
+            <option value="task">Task ·</option>
+            <option value="event">Event ○</option>
+            <option value="note">Note —</option>
+            <option value="priority">Priority ★</option>
+          </select>
+          <input type="text" id="monthlyInput" placeholder="Add to month" autocomplete="off">
+          <button class="add" id="monthlyAdd">Add</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="view" id="view-future">
+    <div class="view-head">
+      <div><div class="view-label">Year</div><div class="view-title" id="yearLabel"></div></div>
+      <div></div>
+      <div class="pager">
+        <button id="prevYear">←</button>
+        <button id="nextYear">→</button>
+      </div>
+    </div>
+    <div class="future-grid" id="futureGrid"></div>
+  </section>
+
+  <section class="view" id="view-collections">
+    <div class="view-head">
+      <div><div class="view-label">Collection</div><div class="view-title" id="collectionTitle">—</div></div>
+      <div></div><div></div>
+    </div>
+    <div class="collections-bar">
+      <select id="collectionSelect"></select>
+      <input type="text" id="newCollectionName" placeholder="New collection name" autocomplete="off">
+      <button id="addCollectionBtn">Create</button>
+      <button id="deleteCollectionBtn" class="ghost">Delete</button>
+    </div>
+    <ul class="entry-list" id="collectionEntries"></ul>
+    <div class="composer" id="collectionAddRow">
+      <span class="spacer">+</span>
+      <select id="collectionType">
+        <option value="task">Task ·</option>
+        <option value="note">Note —</option>
+        <option value="event">Event ○</option>
+        <option value="priority">Priority ★</option>
+      </select>
+      <input type="text" id="collectionInput" placeholder="Add to collection" autocomplete="off">
+      <button class="add" id="collectionAdd">Add</button>
+    </div>
+  </section>
+
+  <section class="view" id="view-index">
+    <div class="view-head">
+      <div><div class="view-label">Index</div><div class="view-title">Everything in the journal</div></div>
+      <div></div><div></div>
+    </div>
+    <div id="indexContent"></div>
+  </section>
+
+  <section class="view" id="view-done">
+    <div class="view-head">
+      <div><div class="view-label">History</div><div class="view-title">Done &amp; Notes</div></div>
+      <div></div><div></div>
+    </div>
+    <div id="doneContent"></div>
+  </section>
+
+  <section class="view" id="view-source">
+    <div class="view-head">
+      <div><div class="view-label">Source</div><div class="view-title">journal.md</div></div>
+      <div></div><div></div>
+    </div>
+    <p class="key-desc">Live markdown — the canonical source. Edit and Apply to push changes back to the file.</p>
+    <div class="source-toolbar">
+      <span class="pill">journal.md</span>
+      <button id="copySourceBtn">Copy</button>
+      <button id="applySourceBtn">Apply</button>
+      <button id="revertSourceBtn">Revert</button>
+      <button id="refreshBtn">Re-read file</button>
+    </div>
+    <textarea class="source-area" id="sourceArea" spellcheck="false"></textarea>
+  </section>
+
+  <section class="view" id="view-key">
+    <div class="view-head">
+      <div><div class="view-label">Reference</div><div class="view-title">Key</div></div>
+      <div></div><div></div>
+    </div>
+    <div class="key-block">
+      <div class="key-row"><span class="g">·</span><span>Task</span></div>
+      <div class="key-row"><span class="g">×</span><span>Task complete</span></div>
+      <div class="key-row"><span class="g">&gt;</span><span>Task migrated</span></div>
+      <div class="key-row"><span class="g">&lt;</span><span>Task scheduled</span></div>
+      <div class="key-row"><span class="g">~</span><span>Task cancelled</span></div>
+      <div class="key-row"><span class="g">○</span><span>Event</span></div>
+      <div class="key-row"><span class="g">—</span><span>Note</span></div>
+      <div class="key-row"><span class="g">★</span><span>Priority</span></div>
+      <div class="key-row"><span class="g">!</span><span>Idea</span></div>
+    </div>
+    <p class="key-desc">Capture quickly. Click the bullet on any task to cycle its state. Every change autosaves to journal.md. The page polls the file every 4 seconds so external edits (e.g. from a skill) appear automatically.</p>
+  </section>
+
+</div>
+
+<div class="modal-bg" id="modalBackdrop">
+  <div class="modal">
+    <h3 id="modalTitle">Confirm</h3>
+    <p id="modalMessage"></p>
+    <div class="modal-actions">
+      <button class="cancel" id="modalCancel">Cancel</button>
+      <button class="confirm" id="modalConfirm">Delete</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const PREFS_KEY = 'bujo-served.prefs.v1';
+
+function defaultState() {
+  return {
+    title: 'BULLET JOURNAL',
+    daily: {}, monthly: {}, future: {}, collections: {},
+    view: 'daily',
+    activeDate: todayISO(),
+    activeMonth: monthISO(),
+    activeYear: new Date().getFullYear(),
+    activeCollection: 'Reading list',
+    updated: new Date().toISOString()
+  };
+}
+let state = defaultState();
+let writeTimer = null;
+let lastWrittenMd = '';
+let lastSeenMtime = 0;
+let suppressPoll = false;
+
+/* ---------- date helpers ---------- */
+function todayISO() { const d = new Date(); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function monthISO(d = new Date()) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; }
+function pad(n) { return String(n).padStart(2, '0'); }
+function prettyDate(iso) { const [y,m,d]=iso.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'}); }
+function prettyDateFull(iso) { const [y,m,d]=iso.split('-').map(Number); return new Date(y,m-1,d).toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}); }
+function prettyMonth(iso) { const [y,m]=iso.split('-').map(Number); return new Date(y,m-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}); }
+function shiftDay(iso, d) { const [y,m,da]=iso.split('-').map(Number); const x=new Date(y,m-1,da); x.setDate(x.getDate()+d); return `${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())}`; }
+function shiftMonth(iso, n) { const [y,m]=iso.split('-').map(Number); const x=new Date(y,m-1,1); x.setMonth(x.getMonth()+n); return `${x.getFullYear()}-${pad(x.getMonth()+1)}`; }
+
+/* ---------- entry model ---------- */
+function glyphFor(e) {
+  if (e.type === 'task') {
+    if (e.status === 'done') return '×';
+    if (e.status === 'cancelled') return '~';
+    if (e.status === 'migrated') return '>';
+    if (e.status === 'scheduled') return '<';
+    return '·';
+  }
+  if (e.type === 'event') return '○';
+  if (e.type === 'note') return '—';
+  if (e.type === 'priority') return e.status === 'migrated' ? '>' : '★';
+  if (e.type === 'inspiration') return '!';
+  return '·';
+}
+function cycleStatus(e) {
+  if (e.type !== 'task') return;
+  const order = ['open','done','migrated','cancelled','open'];
+  e.status = order[order.indexOf(e.status || 'open') + 1];
+}
+function newEntry(type, text, status) {
+  return { id: Date.now()+Math.random().toString(36).slice(2,7),
+    type, text: (text||'').trim(),
+    status: type === 'task' ? (status || 'open') : null };
+}
+
+/* ---------- markdown parse / serialize ---------- */
+function parseMarkdown(md) {
+  const s = defaultState();
+  s.daily = {}; s.monthly = {}; s.future = {}; s.collections = {};
+  const lines = md.split('\n');
+  let section = null, target = null;
+  for (const line of lines) {
+    const tm = line.match(/<!--\s*title:\s*(.+?)\s*-->/i); if (tm) { s.title = tm[1]; continue; }
+    const um = line.match(/<!--\s*updated:\s*(.+?)\s*-->/i); if (um) { s.updated = um[1]; continue; }
+    const sec = line.match(/^##\s+(.+?)\s*$/);
+    if (sec) {
+      const n = sec[1].toLowerCase();
+      if (n === 'daily') section = 'daily';
+      else if (n === 'monthly') section = 'monthly';
+      else if (n === 'future') section = 'future';
+      else if (n === 'collections') section = 'collections';
+      else section = null;
+      target = null;
+      continue;
+    }
+    const item = line.match(/^###\s+(.+?)\s*$/);
+    if (item) {
+      const k = item[1].trim();
+      if (section === 'daily') { s.daily[k] = s.daily[k] || []; target = s.daily[k]; }
+      else if (section === 'monthly') { s.monthly[k] = s.monthly[k] || []; target = s.monthly[k]; }
+      else if (section === 'future') { s.future[k] = s.future[k] || []; target = s.future[k]; }
+      else if (section === 'collections') { s.collections[k] = s.collections[k] || []; target = s.collections[k]; }
+      continue;
+    }
+    if (!target) continue;
+    const li = line.match(/^\s*-\s+(.+?)\s*$/); if (!li) continue;
+    const c = li[1];
+    const t = c.match(/^\[([ xX>~<])\]\s*(.*)$/);
+    if (t) {
+      const m = t[1].toLowerCase();
+      let status = 'open';
+      if (m === 'x') status = 'done';
+      else if (m === '>') status = 'migrated';
+      else if (m === '~') status = 'cancelled';
+      else if (m === '<') status = 'scheduled';
+      if (t[2].startsWith('★')) {
+        const pe = newEntry('priority', t[2].replace(/^★\s*/, '')); pe.status = status; target.push(pe);
+      } else { target.push(newEntry('task', t[2], status)); }
+      continue;
+    }
+    if (c.startsWith('○')) { target.push(newEntry('event', c.replace(/^○\s*/,''))); continue; }
+    if (c.startsWith('—') || c.startsWith('–')) { target.push(newEntry('note', c.replace(/^[—–]\s*/,''))); continue; }
+    if (c.startsWith('★')) { target.push(newEntry('priority', c.replace(/^★\s*/,''))); continue; }
+    if (c.startsWith('!')) { target.push(newEntry('inspiration', c.replace(/^!\s*/,''))); continue; }
+    target.push(newEntry('note', c));
+  }
+  if (!Object.keys(s.collections).length) s.collections = { 'Reading list': [], 'Ideas': [], 'Gratitude': [] };
+  if (!s.activeCollection || !s.collections[s.activeCollection]) s.activeCollection = Object.keys(s.collections)[0] || null;
+  return s;
+}
+
+function serializeMarkdown(s) {
+  const lines = [];
+  lines.push('# Journal'); lines.push('');
+  lines.push(`<!-- title: ${s.title} -->`);
+  lines.push(`<!-- updated: ${s.updated} -->`);
+  lines.push('');
+  lines.push('## Daily'); lines.push('');
+  Object.keys(s.daily).filter(k => s.daily[k] && s.daily[k].length).sort().reverse().forEach(d => {
+    lines.push(`### ${d}`); s.daily[d].forEach(e => lines.push(fmt(e))); lines.push('');
+  });
+  lines.push('## Monthly'); lines.push('');
+  Object.keys(s.monthly).filter(k => s.monthly[k] && s.monthly[k].length).sort().reverse().forEach(m => {
+    lines.push(`### ${m}`); s.monthly[m].forEach(e => lines.push(fmt(e))); lines.push('');
+  });
+  lines.push('## Future'); lines.push('');
+  Object.keys(s.future).filter(k => s.future[k] && s.future[k].length).sort().forEach(m => {
+    lines.push(`### ${m}`); s.future[m].forEach(e => lines.push(fmt(e))); lines.push('');
+  });
+  lines.push('## Collections'); lines.push('');
+  Object.keys(s.collections).forEach(n => {
+    lines.push(`### ${n}`); s.collections[n].forEach(e => lines.push(fmt(e))); lines.push('');
+  });
+  return lines.join('\n').replace(/\n{3,}/g, '\n\n').trimEnd() + '\n';
+}
+function fmt(e) {
+  if (e.type === 'task') {
+    let m = ' ';
+    if (e.status === 'done') m = 'x';
+    else if (e.status === 'migrated') m = '>';
+    else if (e.status === 'cancelled') m = '~';
+    else if (e.status === 'scheduled') m = '<';
+    return `- [${m}] ${e.text}`;
+  }
+  if (e.type === 'event') return `- ○ ${e.text}`;
+  if (e.type === 'note') return `- — ${e.text}`;
+  if (e.type === 'priority') return e.status === 'migrated' ? `- [>] ★ ${e.text}` : `- ★ ${e.text}`;
+  if (e.type === 'inspiration') return `- ! ${e.text}`;
+  return `- ${e.text}`;
+}
+
+/* ---------- Electron file I/O ---------- */
+async function fetchMd() { return window.electronAPI.readJournal(); }
+async function fetchMtime() { return window.electronAPI.getJournalMtime(); }
+async function pushMd(md) { return window.electronAPI.writeJournal(md); }
+
+function setStatus(kind, label) {
+  document.getElementById('saveDot').className = 'save-dot' + (kind ? ' ' + kind : '');
+  document.getElementById('saveStatus').textContent = label;
+}
+
+async function saveNow() {
+  if (writeTimer) { clearTimeout(writeTimer); writeTimer = null; }
+  state.updated = new Date().toISOString();
+  const md = serializeMarkdown(state);
+  if (md === lastWrittenMd) { setStatus('linked', 'Synced'); return; }
+  setStatus('dirty', 'Saving…');
+  try {
+    suppressPoll = true;
+    await pushMd(md);
+    lastWrittenMd = md;
+    lastSeenMtime = await fetchMtime();
+    setStatus('linked', 'Synced');
+    hideError();
+  } catch (err) {
+    console.error(err);
+    setStatus('error', 'Save failed');
+    showError('Save failed: ' + err.message);
+  } finally {
+    setTimeout(() => { suppressPoll = false; }, 400);
+  }
+}
+function scheduleSave() {
+  if (writeTimer) clearTimeout(writeTimer);
+  setStatus('dirty', 'Saving…');
+  writeTimer = setTimeout(saveNow, 500);
+}
+
+async function pollForExternalChange() {
+  if (suppressPoll) return;
+  try {
+    const m = await fetchMtime();
+    if (m && m > lastSeenMtime + 0.5) {
+      const txt = await fetchMd();
+      // Only refresh if content actually differs from what we last wrote
+      if (txt !== lastWrittenMd) {
+        const cur = serializeMarkdown(state);
+        if (txt !== cur) {
+          state = parseMarkdown(txt);
+          lastWrittenMd = txt;
+          renderAll();
+          toast('Reloaded — file changed externally');
+        }
+      }
+      lastSeenMtime = m;
+    }
+  } catch (e) {
+    setStatus('error', 'Read error');
+  }
+}
+
+function showError(msg) {
+  let el = document.getElementById('errorBanner');
+  if (!el) {
+    el = document.createElement('div'); el.id = 'errorBanner'; el.className = 'error-banner';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `<span>${msg}</span><button onclick="document.getElementById('errorBanner').remove()">DISMISS</button>`;
+}
+function hideError() { const el = document.getElementById('errorBanner'); if (el) el.remove(); }
+
+function commit() { scheduleSave(); savePrefs(); }
+function savePrefs() {
+  try { localStorage.setItem(PREFS_KEY, JSON.stringify({
+    view: state.view, activeDate: state.activeDate, activeMonth: state.activeMonth,
+    activeYear: state.activeYear, activeCollection: state.activeCollection
+  })); } catch {}
+}
+function loadPrefs() {
+  try {
+    const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+    if (p.view) state.view = p.view;
+    if (p.activeDate) state.activeDate = p.activeDate;
+    if (p.activeMonth) state.activeMonth = p.activeMonth;
+    if (p.activeYear) state.activeYear = p.activeYear;
+    if (p.activeCollection) state.activeCollection = p.activeCollection;
+  } catch {}
+}
+
+/* ---------- render ---------- */
+function renderEntryList(ul, entries, opts = {}) {
+  ul.innerHTML = '';
+  if (!entries || !entries.length) {
+    const li = document.createElement('li'); li.className = 'empty';
+    li.textContent = opts.emptyMsg || 'No entries.';
+    ul.appendChild(li); return;
+  }
+  entries.forEach((entry, idx) => {
+    const li = document.createElement('li');
+    li.className = `entry ${entry.type}`;
+    if (entry.status === 'done') li.classList.add('done');
+    if (entry.status === 'cancelled') li.classList.add('cancelled');
+    if (entry.status === 'migrated') li.classList.add('migrated');
+    if (entry.status === 'scheduled') li.classList.add('scheduled');
+    if (!opts.hideNum) {
+      const num = document.createElement('span'); num.className = 'num';
+      num.textContent = String(idx + 1).padStart(3, '0');
+      li.appendChild(num);
+    } else { li.style.gridTemplateColumns = '16px 1fr auto'; }
+    const glyph = document.createElement('span');
+    glyph.className = 'glyph'; glyph.textContent = glyphFor(entry);
+    glyph.onclick = (evt) => { if (entry.type === 'task') { cycleStatus(entry); if (entry.status === 'done') launchConfetti(evt.clientX, evt.clientY); commit(); renderAll(); } };
+    li.appendChild(glyph);
+    const text = document.createElement('span');
+    text.className = 'text'; text.contentEditable = 'true'; text.spellcheck = false;
+    text.textContent = entry.text;
+    text.addEventListener('blur', () => {
+      const v = text.textContent.trim();
+      if (v) { entry.text = v; commit(); }
+      else { text.textContent = entry.text; }
+    });
+    text.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); text.blur(); } });
+    li.appendChild(text);
+    const actions = document.createElement('span'); actions.className = 'actions';
+    if ((entry.type === 'task' || entry.type === 'priority') && !['done','cancelled','migrated','scheduled'].includes(entry.status)) {
+      const schedBtn = document.createElement('button'); schedBtn.textContent = 'Schedule';
+      schedBtn.onclick = e => {
+        e.stopPropagation();
+        actions.innerHTML = '';
+        actions.style.opacity = '1';
+        const inp = document.createElement('input');
+        inp.type = 'date'; inp.value = todayISO();
+        inp.style.cssText = 'height:18px;border:none;border-bottom:1px solid var(--line);background:transparent;font:inherit;font-size:10px;color:var(--ink);outline:none;width:96px;';
+        const go = document.createElement('button'); go.textContent = '→';
+        const doSchedule = () => {
+          if (!inp.value) return;
+          entry.status = 'scheduled';
+          state.daily[inp.value] = state.daily[inp.value] || [];
+          state.daily[inp.value].push(newEntry(entry.type, entry.text));
+          commit(); renderAll();
+        };
+        go.onclick = doSchedule;
+        inp.addEventListener('keydown', ev => {
+          if (ev.key === 'Enter') { ev.preventDefault(); doSchedule(); }
+          if (ev.key === 'Escape') renderAll();
+        });
+        inp.addEventListener('blur', () => setTimeout(() => { if (!actions.contains(document.activeElement)) renderAll(); }, 150));
+        actions.appendChild(inp); actions.appendChild(go);
+        setTimeout(() => inp.focus(), 0);
+      };
+      actions.appendChild(schedBtn);
+    }
+    if ((entry.type === 'task' || entry.type === 'priority') && entry.status !== 'done' && entry.status !== 'cancelled' && opts.onMigrate) {
+      const m = document.createElement('button'); m.textContent = 'Migrate';
+      m.onclick = () => opts.onMigrate(entry, idx);
+      actions.appendChild(m);
+    }
+    const del = document.createElement('button'); del.textContent = 'Delete';
+    del.onclick = () => { entries.splice(idx, 1); commit(); renderAll(); };
+    actions.appendChild(del);
+    li.appendChild(actions);
+
+    if (opts.reorderable) {
+      li.draggable = true;
+      li.addEventListener('dragstart', e => {
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', String(idx));
+        requestAnimationFrame(() => li.classList.add('dragging'));
+      });
+      li.addEventListener('dragend', () => {
+        li.classList.remove('dragging');
+        ul.querySelectorAll('.drop-above,.drop-below').forEach(el => el.classList.remove('drop-above','drop-below'));
+      });
+      li.addEventListener('dragover', e => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        ul.querySelectorAll('.drop-above,.drop-below').forEach(el => el.classList.remove('drop-above','drop-below'));
+        const rect = li.getBoundingClientRect();
+        li.classList.add(e.clientY < rect.top + rect.height / 2 ? 'drop-above' : 'drop-below');
+      });
+      li.addEventListener('dragleave', e => {
+        if (!li.contains(e.relatedTarget)) li.classList.remove('drop-above','drop-below');
+      });
+      li.addEventListener('drop', e => {
+        e.preventDefault();
+        ul.querySelectorAll('.drop-above,.drop-below').forEach(el => el.classList.remove('drop-above','drop-below'));
+        const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+        const rect = li.getBoundingClientRect();
+        const insertBefore = e.clientY < rect.top + rect.height / 2 ? idx : idx + 1;
+        if (fromIdx === insertBefore || fromIdx + 1 === insertBefore) return;
+        const [moved] = entries.splice(fromIdx, 1);
+        entries.splice(insertBefore > fromIdx ? insertBefore - 1 : insertBefore, 0, moved);
+        commit(); renderAll();
+      });
+    }
+
+    ul.appendChild(li);
+  });
+}
+
+function renderHeader() {
+  document.getElementById('journalTitle').textContent = state.title;
+  document.getElementById('todayStamp').textContent =
+    new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+}
+
+function setView(view) {
+  state.view = view;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
+  document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${view}`));
+  savePrefs();
+  renderAll();
+}
+
+function renderDailySummary(entries) {
+  const el = document.getElementById('dailySummary');
+  if (!entries || !entries.length) { el.textContent = ''; return; }
+  const priority = entries.filter(e => e.type === 'priority' && e.status !== 'migrated').length;
+  const open     = entries.filter(e => e.type === 'task' && (!e.status || e.status === 'open')).length;
+  const done     = entries.filter(e => e.type === 'task' && e.status === 'done').length;
+  const migrated = entries.filter(e => (e.type === 'task' || e.type === 'priority') && e.status === 'migrated').length;
+  const cancelled= entries.filter(e => e.type === 'task' && e.status === 'cancelled').length;
+  const parts = [];
+  if (priority)  parts.push(`<span style="color:var(--accent)">${priority} ${priority === 1 ? 'priority' : 'priorities'}</span>`);
+  if (open)      parts.push(`${open} open`);
+  if (done)      parts.push(`<span style="color:var(--ink)">${done} completed</span>`);
+  if (migrated)  parts.push(`${migrated} migrated`);
+  if (cancelled) parts.push(`${cancelled} cancelled`);
+  el.innerHTML = parts.join(' · ');
+}
+
+function renderDaily() {
+  document.getElementById('dailyLabel').textContent = prettyDate(state.activeDate);
+  document.getElementById('datePicker').value = state.activeDate;
+  const list = state.daily[state.activeDate] || [];
+  renderDailySummary(list);
+  renderEntryList(document.getElementById('dailyEntries'), list, {
+    emptyMsg: 'A blank day.',
+    reorderable: true,
+    onMigrate: (entry) => {
+      entry.status = 'migrated';
+      const t = shiftDay(state.activeDate, 1);
+      state.daily[t] = state.daily[t] || [];
+      state.daily[t].push(newEntry(entry.type, entry.text));
+      commit(); renderAll();
+    }
+  });
+  renderMigrateBanner();
+}
+
+function renderMigrateBanner() {
+  const banner = document.getElementById('migrateBanner');
+  banner.innerHTML = '';
+  if (state.activeDate !== todayISO()) return;
+  const today = todayISO();
+  let openCount = 0, oldest = null;
+  for (const [d, entries] of Object.entries(state.daily)) {
+    if (d >= today) continue;
+    const opens = entries.filter(e => (e.type === 'task' || e.type === 'priority') && (!e.status || e.status === 'open'));
+    if (opens.length) { openCount += opens.length; if (!oldest || d < oldest) oldest = d; }
+  }
+  if (!openCount) return;
+  const div = document.createElement('div'); div.className = 'banner';
+  div.innerHTML = `<span>${openCount} open task${openCount === 1 ? '' : 's'} from prior days. Oldest: ${prettyDate(oldest)}.</span><button id="migrateAllBtn">Migrate all</button>`;
+  banner.appendChild(div);
+  document.getElementById('migrateAllBtn').onclick = () => {
+    for (const [d, entries] of Object.entries(state.daily)) {
+      if (d >= today) continue;
+      entries.forEach(e => {
+        if ((e.type === 'task' || e.type === 'priority') && (!e.status || e.status === 'open')) {
+          e.status = 'migrated';
+          state.daily[today] = state.daily[today] || [];
+          state.daily[today].push(newEntry(e.type, e.text));
+        }
+      });
+    }
+    commit(); renderAll();
+  };
+}
+
+function renderMonthly() {
+  const m = state.activeMonth;
+  document.getElementById('monthlyLabel').textContent = prettyMonth(m);
+  document.getElementById('monthPicker').value = m;
+  const [y, mo] = m.split('-').map(Number);
+  const daysInMonth = new Date(y, mo, 0).getDate();
+  const startCol = new Date(y, mo-1, 1).getDay();
+  const today = todayISO();
+  const grid = document.getElementById('calendarGrid'); grid.innerHTML = '';
+  ['S','M','T','W','T','F','S'].forEach(n => {
+    const d = document.createElement('div'); d.className = 'dow'; d.textContent = n; grid.appendChild(d);
+  });
+  for (let i = 0; i < startCol; i++) {
+    const e = document.createElement('div'); e.className = 'cell empty'; grid.appendChild(e);
+  }
+  for (let d = 1; d <= daysInMonth; d++) {
+    const c = document.createElement('div'); c.className = 'cell'; c.textContent = String(d).padStart(2, '0');
+    const iso = `${y}-${pad(mo)}-${pad(d)}`;
+    if (iso === today) c.classList.add('today');
+    if (state.daily[iso] && state.daily[iso].length) {
+      const dot = document.createElement('span'); dot.className = 'dot'; c.appendChild(dot);
+    }
+    c.onclick = () => { state.activeDate = iso; setView('daily'); };
+    grid.appendChild(c);
+  }
+  renderEntryList(document.getElementById('monthlyEntries'), state.monthly[m] || [], {
+    emptyMsg: 'Nothing for this month.',
+    onMigrate: (entry) => {
+      entry.status = 'migrated';
+      const next = shiftMonth(m, 1);
+      state.monthly[next] = state.monthly[next] || [];
+      state.monthly[next].push(newEntry(entry.type, entry.text));
+      commit(); renderAll();
+    }
+  });
+  const futureEntries = state.future[m] || [];
+  const futureSection = document.getElementById('monthlyFutureSection');
+  if (futureEntries.length) {
+    futureSection.style.display = '';
+    renderEntryList(document.getElementById('monthlyFutureEntries'), futureEntries, {
+      emptyMsg: '',
+      onMigrate: (entry) => {
+        entry.status = 'migrated';
+        state.monthly[m] = state.monthly[m] || [];
+        state.monthly[m].push(newEntry(entry.type, entry.text));
+        commit(); renderAll();
+      }
+    });
+  } else {
+    futureSection.style.display = 'none';
+  }
+}
+
+function renderFuture() {
+  document.getElementById('yearLabel').textContent = state.activeYear;
+  const grid = document.getElementById('futureGrid'); grid.innerHTML = '';
+  const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  for (let m = 1; m <= 12; m++) {
+    const key = `${state.activeYear}-${pad(m)}`;
+    const box = document.createElement('div'); box.className = 'future-month';
+    const head = document.createElement('div'); head.className = 'future-month-head';
+    head.innerHTML = `<span class="future-month-name">${names[m-1]}</span><span class="future-month-year">${state.activeYear}</span>`;
+    box.appendChild(head);
+    const ul = document.createElement('ul'); ul.className = 'entry-list'; box.appendChild(ul);
+    renderEntryList(ul, state.future[key] || [], {
+      emptyMsg: '—', hideNum: true,
+      onMigrate: (entry) => {
+        entry.status = 'migrated';
+        state.monthly[key] = state.monthly[key] || [];
+        state.monthly[key].push(newEntry(entry.type, entry.text));
+        commit(); renderAll();
+      }
+    });
+    const composer = document.createElement('div'); composer.className = 'composer';
+    composer.innerHTML = `<select><option value="event">Event ○</option><option value="task">Task ·</option><option value="note">Note —</option><option value="priority">Priority ★</option></select><input type="text" placeholder="Add" autocomplete="off"><button class="add">+</button>`;
+    const sel = composer.querySelector('select');
+    const inp = composer.querySelector('input');
+    const btn = composer.querySelector('button');
+    const addIt = () => {
+      const v = inp.value.trim(); if (!v) return;
+      state.future[key] = state.future[key] || [];
+      state.future[key].push(newEntry(sel.value, v));
+      inp.value = ''; commit(); renderAll();
+    };
+    btn.onclick = addIt;
+    inp.addEventListener('keydown', e => { if (e.key === 'Enter') addIt(); });
+    box.appendChild(composer);
+    grid.appendChild(box);
+  }
+}
+
+function renderCollections() {
+  const select = document.getElementById('collectionSelect');
+  const names = Object.keys(state.collections);
+  if (names.length && !state.activeCollection) state.activeCollection = names[0];
+  select.innerHTML = '';
+  names.forEach(n => {
+    const opt = document.createElement('option');
+    opt.value = n; opt.textContent = n;
+    if (n === state.activeCollection) opt.selected = true;
+    select.appendChild(opt);
+  });
+  document.getElementById('collectionTitle').textContent = state.activeCollection || '—';
+  const ul = document.getElementById('collectionEntries');
+  if (!state.activeCollection || !state.collections[state.activeCollection]) {
+    ul.innerHTML = '';
+    document.getElementById('collectionAddRow').style.display = 'none';
+    return;
+  }
+  document.getElementById('collectionAddRow').style.display = '';
+  renderEntryList(ul, state.collections[state.activeCollection], { emptyMsg: 'Empty.' });
+}
+
+function renderIndex() {
+  const root = document.getElementById('indexContent'); root.innerHTML = '';
+  const makeSection = (title, items, onClick) => {
+    if (!items.length) return;
+    const sec = document.createElement('div'); sec.className = 'index-section';
+    const head = document.createElement('div'); head.className = 'index-section-head'; head.textContent = title;
+    sec.appendChild(head);
+    const ul = document.createElement('ul'); ul.className = 'index-list';
+    items.forEach(it => {
+      const li = document.createElement('li');
+      li.innerHTML = `<span class="name">${it.name}</span><span class="count">${String(it.count).padStart(3, '0')}</span>`;
+      li.onclick = () => onClick(it); ul.appendChild(li);
+    });
+    sec.appendChild(ul); root.appendChild(sec);
+  };
+  const days = Object.entries(state.daily).filter(([, e]) => e && e.length).sort((a,b)=>b[0].localeCompare(a[0])).map(([d, e]) => ({ id: d, name: prettyDateFull(d), count: e.length }));
+  makeSection('Daily', days, (it) => { state.activeDate = it.id; setView('daily'); });
+  const months = Object.entries(state.monthly).filter(([, e]) => e && e.length).sort((a,b)=>b[0].localeCompare(a[0])).map(([m, e]) => ({ id: m, name: prettyMonth(m), count: e.length }));
+  makeSection('Monthly', months, (it) => { state.activeMonth = it.id; setView('monthly'); });
+  const collections = Object.entries(state.collections).map(([n, e]) => ({ id: n, name: n, count: e.length }));
+  makeSection('Collections', collections, (it) => { state.activeCollection = it.id; setView('collections'); });
+  if (!root.children.length) {
+    const e = document.createElement('div'); e.className = 'empty';
+    e.textContent = 'Empty. Add an entry to begin.'; root.appendChild(e);
+  }
+}
+
+function renderSource() {
+  const area = document.getElementById('sourceArea');
+  if (document.activeElement === area) return;
+  area.value = serializeMarkdown(state);
+}
+
+function renderDone() {
+  const root = document.getElementById('doneContent');
+  root.innerHTML = '';
+  const items = [];
+  const collect = (bucket, periodType) => {
+    Object.entries(bucket).forEach(([period, entries]) => {
+      (entries || []).forEach(e => {
+        if (e.status === 'done' || e.type === 'note' || e.type === 'inspiration') {
+          items.push({ ...e, period, periodType });
+        }
+      });
+    });
+  };
+  collect(state.daily, 'daily');
+  collect(state.monthly, 'monthly');
+  collect(state.collections, 'collection');
+
+  items.sort((a, b) => {
+    const rank = { daily: 0, monthly: 1, collection: 2 };
+    if (rank[a.periodType] !== rank[b.periodType]) return rank[a.periodType] - rank[b.periodType];
+    return b.period.localeCompare(a.period);
+  });
+
+  if (!items.length) {
+    const el = document.createElement('div'); el.className = 'empty';
+    el.textContent = 'No completed tasks or notes yet.'; root.appendChild(el); return;
+  }
+
+  const ul = document.createElement('ul'); ul.className = 'entry-list';
+  items.forEach(item => {
+    const li = document.createElement('li');
+    li.className = `entry ${item.type}`; li.style.gridTemplateColumns = '20px 1fr auto';
+    if (item.status === 'done') li.classList.add('done');
+
+    const glyph = document.createElement('span'); glyph.className = 'glyph';
+    glyph.textContent = glyphFor(item); li.appendChild(glyph);
+
+    const text = document.createElement('span'); text.className = 'text';
+    text.textContent = item.text; li.appendChild(text);
+
+    const period = document.createElement('span'); period.className = 'done-period';
+    if (item.periodType === 'daily') {
+      const [y,m,d] = item.period.split('-').map(Number);
+      period.textContent = new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
+    } else if (item.periodType === 'monthly') {
+      const [y,m] = item.period.split('-').map(Number);
+      period.textContent = new Date(y,m-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'});
+    } else {
+      period.textContent = item.period;
+    }
+    li.appendChild(period);
+    ul.appendChild(li);
+  });
+  root.appendChild(ul);
+}
+
+function renderAll() {
+  renderHeader(); renderDaily(); renderMonthly();
+  renderFuture(); renderCollections(); renderIndex(); renderDone(); renderSource();
+}
+
+/* ---------- wiring ---------- */
+document.querySelectorAll('.nav-btn').forEach(b => b.onclick = () => setView(b.dataset.view));
+const titleEl = document.getElementById('journalTitle');
+titleEl.addEventListener('blur', e => {
+  const v = e.target.textContent.trim();
+  if (v) { state.title = v; commit(); }
+  else { e.target.textContent = state.title; }
+});
+titleEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
+
+document.getElementById('prevDay').onclick = () => { state.activeDate = shiftDay(state.activeDate, -1); commit(); renderAll(); };
+document.getElementById('nextDay').onclick = () => { state.activeDate = shiftDay(state.activeDate, 1); commit(); renderAll(); };
+document.getElementById('todayBtn').onclick = () => { state.activeDate = todayISO(); commit(); renderAll(); };
+document.getElementById('datePicker').onchange = e => { state.activeDate = e.target.value; commit(); renderAll(); };
+
+function addDaily() {
+  const i = document.getElementById('dailyInput');
+  const t = document.getElementById('dailyType').value;
+  const v = i.value.trim(); if (!v) return;
+  state.daily[state.activeDate] = state.daily[state.activeDate] || [];
+  state.daily[state.activeDate].push(newEntry(t, v));
+  i.value = ''; commit(); renderAll(); i.focus();
+}
+document.getElementById('dailyAdd').onclick = addDaily;
+document.getElementById('dailyInput').addEventListener('keydown', e => { if (e.key === 'Enter') addDaily(); });
+
+document.getElementById('prevMonth').onclick = () => { state.activeMonth = shiftMonth(state.activeMonth, -1); commit(); renderAll(); };
+document.getElementById('nextMonth').onclick = () => { state.activeMonth = shiftMonth(state.activeMonth, 1); commit(); renderAll(); };
+document.getElementById('monthPicker').onchange = e => { state.activeMonth = e.target.value; commit(); renderAll(); };
+function addMonthly() {
+  const i = document.getElementById('monthlyInput');
+  const t = document.getElementById('monthlyType').value;
+  const v = i.value.trim(); if (!v) return;
+  state.monthly[state.activeMonth] = state.monthly[state.activeMonth] || [];
+  state.monthly[state.activeMonth].push(newEntry(t, v));
+  i.value = ''; commit(); renderAll(); i.focus();
+}
+document.getElementById('monthlyAdd').onclick = addMonthly;
+document.getElementById('monthlyInput').addEventListener('keydown', e => { if (e.key === 'Enter') addMonthly(); });
+
+document.getElementById('prevYear').onclick = () => { state.activeYear--; commit(); renderAll(); };
+document.getElementById('nextYear').onclick = () => { state.activeYear++; commit(); renderAll(); };
+
+document.getElementById('collectionSelect').onchange = e => { state.activeCollection = e.target.value; commit(); renderAll(); };
+document.getElementById('addCollectionBtn').onclick = () => {
+  const i = document.getElementById('newCollectionName');
+  const name = i.value.trim(); if (!name) return;
+  if (state.collections[name]) { toast('Collection exists'); return; }
+  state.collections[name] = []; state.activeCollection = name;
+  i.value = ''; commit(); renderAll();
+};
+document.getElementById('newCollectionName').addEventListener('keydown', e => {
+  if (e.key === 'Enter') document.getElementById('addCollectionBtn').click();
+});
+document.getElementById('deleteCollectionBtn').onclick = () => {
+  if (!state.activeCollection) return;
+  showModal('Delete collection', `"${state.activeCollection}" and its items will be removed.`, () => {
+    delete state.collections[state.activeCollection];
+    state.activeCollection = Object.keys(state.collections)[0] || null;
+    commit(); renderAll();
+  });
+};
+function addToCollection() {
+  if (!state.activeCollection) return;
+  const i = document.getElementById('collectionInput');
+  const t = document.getElementById('collectionType').value;
+  const v = i.value.trim(); if (!v) return;
+  state.collections[state.activeCollection].push(newEntry(t, v));
+  i.value = ''; commit(); renderAll(); i.focus();
+}
+document.getElementById('collectionAdd').onclick = addToCollection;
+document.getElementById('collectionInput').addEventListener('keydown', e => { if (e.key === 'Enter') addToCollection(); });
+
+document.getElementById('copySourceBtn').onclick = async () => {
+  const md = serializeMarkdown(state);
+  try { await navigator.clipboard.writeText(md); toast('Copied'); }
+  catch { toast('Copy failed'); }
+};
+document.getElementById('applySourceBtn').onclick = () => {
+  const md = document.getElementById('sourceArea').value;
+  state = parseMarkdown(md); commit(); renderAll(); toast('Source applied');
+};
+document.getElementById('revertSourceBtn').onclick = () => renderSource();
+document.getElementById('refreshBtn').onclick = async () => {
+  try {
+    const txt = await fetchMd();
+    state = parseMarkdown(txt);
+    lastWrittenMd = txt;
+    lastSeenMtime = await fetchMtime();
+    renderAll();
+    toast('Re-read journal.md');
+  } catch (e) { toast('Re-read failed'); }
+};
+
+let modalCb = null;
+function showModal(title, msg, onConfirm) {
+  document.getElementById('modalTitle').textContent = title;
+  document.getElementById('modalMessage').textContent = msg;
+  document.getElementById('modalBackdrop').classList.add('active');
+  modalCb = onConfirm;
+}
+document.getElementById('modalCancel').onclick = () => { document.getElementById('modalBackdrop').classList.remove('active'); modalCb = null; };
+document.getElementById('modalConfirm').onclick = () => { document.getElementById('modalBackdrop').classList.remove('active'); if (modalCb) modalCb(); modalCb = null; };
+
+function launchConfetti(originX, originY) {
+  const canvas = document.createElement('canvas');
+  canvas.style.cssText = 'position:fixed;inset:0;width:100vw;height:100vh;pointer-events:none;z-index:9999;';
+  document.body.appendChild(canvas);
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const ctx = canvas.getContext('2d');
+  const colors = ['#d65427','#f5a623','#7ed321','#4a90e2','#bd10e0','#e91e8c','#50e3c2','#f9ca24'];
+  const particles = Array.from({ length: 90 }, () => {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 4 + Math.random() * 9;
+    return {
+      x: originX, y: originY,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 5,
+      w: 7 + Math.random() * 7, h: 3 + Math.random() * 5,
+      color: colors[Math.floor(Math.random() * colors.length)],
+      rot: Math.random() * Math.PI * 2,
+      spin: (Math.random() - 0.5) * 0.28
+    };
+  });
+  let start = null;
+  const DURATION = 2200;
+  (function tick(ts) {
+    if (!start) start = ts;
+    const t = ts - start;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = Math.max(0, 1 - Math.max(0, t - 1400) / 800);
+    particles.forEach(p => {
+      p.x += p.vx; p.y += p.vy;
+      p.vy += 0.28; p.vx *= 0.99; p.rot += p.spin;
+      ctx.save();
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot);
+      ctx.fillStyle = p.color;
+      ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+      ctx.restore();
+    });
+    if (t < DURATION) requestAnimationFrame(tick); else canvas.remove();
+  })(performance.now());
+}
+
+function toast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.classList.remove('show'), 2200);
+}
+
+window.addEventListener('beforeunload', () => { if (writeTimer) saveNow(); });
+
+/* ---------- init ---------- */
+async function init() {
+  loadPrefs();
+  setStatus('', 'Reading…');
+  try {
+    const txt = await fetchMd();
+    if (txt && txt.trim()) {
+      state = parseMarkdown(txt);
+      lastWrittenMd = txt;
+    } else {
+      state = defaultState();
+      const md = serializeMarkdown(state);
+      await pushMd(md);
+      lastWrittenMd = md;
+    }
+    lastSeenMtime = await fetchMtime();
+    loadPrefs();
+    setView(state.view || 'daily');
+    renderAll();
+    setStatus('linked', 'Synced');
+    document.getElementById('loading').classList.add('hidden');
+    setInterval(pollForExternalChange, 4000);
+  } catch (err) {
+    console.error(err);
+    setStatus('error', 'Load failed');
+    document.getElementById('loading').textContent = 'Failed to load journal.md: ' + err.message;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
