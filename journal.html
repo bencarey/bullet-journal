@@ -57,7 +57,7 @@
   .pager input { height: 30px; border: 1px solid var(--line); background: var(--surface); padding: 0 8px; font: inherit; font-size: 11px; font-variant-numeric: tabular-nums; color: var(--ink); margin-left: 4px; }
 
   .entry-list { list-style: none; }
-  .entry { display: grid; grid-template-columns: 28px 20px 1fr auto; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); transition: background 100ms; }
+  .entry { display: grid; grid-template-columns: 28px 20px 1fr 18px auto; align-items: baseline; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line); transition: background 220ms ease; }
   .entry:hover { background: var(--surface); }
   .entry .num { font-family: var(--mono); font-size: 10px; color: var(--ink-4); font-variant-numeric: tabular-nums; user-select: none; }
   .entry .glyph { text-align: center; font-family: var(--mono); font-size: 13px; color: var(--ink); cursor: pointer; user-select: none; line-height: 1; padding-top: 2px; }
@@ -77,6 +77,9 @@
   .entry.priority:not(.migrated) { background: #fdf5f0; }
   .entry.priority:not(.migrated):hover { background: #fbeae2; }
   .entry.priority .glyph { color: var(--accent); }
+  .entry .star-btn { background: none; border: none; padding: 0; cursor: pointer; font-size: 13px; line-height: 1; color: var(--ink-4); opacity: 0; transition: opacity 180ms ease, color 180ms ease; user-select: none; align-self: center; }
+  .entry:hover .star-btn { opacity: 1; }
+  .entry.priority .star-btn { opacity: 1; color: var(--accent); }
   .entry .actions { display: flex; gap: 12px; opacity: 0; transition: opacity 120ms; }
   .entry:hover .actions { opacity: 1; }
   .entry .actions button { background: none; border: none; font: inherit; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); cursor: pointer; padding: 0; }
@@ -115,7 +118,7 @@
   .future-month-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
   .future-month-name { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink); }
   .future-month-year { font-size: 9px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-  .future-month .entry { grid-template-columns: 16px 1fr auto; padding: 6px 0; }
+  .future-month .entry { grid-template-columns: 16px 1fr 18px auto; padding: 6px 0; }
   .future-month .entry .num { display: none; }
   .future-month .composer { grid-template-columns: 16px 1fr auto; padding-top: 10px; border-top: 1px dashed var(--line); margin-top: 10px; }
   .future-month .composer .spacer { display: none; }
@@ -643,7 +646,7 @@ function renderEntryList(ul, entries, opts = {}) {
       const num = document.createElement('span'); num.className = 'num';
       num.textContent = String(idx + 1).padStart(3, '0');
       li.appendChild(num);
-    } else { li.style.gridTemplateColumns = '16px 1fr auto'; }
+    } else { li.style.gridTemplateColumns = '16px 1fr 18px auto'; }
     const glyph = document.createElement('span');
     glyph.className = 'glyph'; glyph.textContent = glyphFor(entry);
     glyph.onclick = (evt) => {
@@ -664,6 +667,20 @@ function renderEntryList(ul, entries, opts = {}) {
     });
     text.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); text.blur(); } });
     li.appendChild(text);
+    if (entry.type === 'task' || entry.type === 'priority') {
+      const star = document.createElement('button'); star.className = 'star-btn';
+      star.textContent = entry.type === 'priority' ? '★' : '☆';
+      star.title = entry.type === 'priority' ? 'Remove priority' : 'Mark as priority';
+      star.onclick = () => {
+        entry.type = entry.type === 'priority' ? 'task' : 'priority';
+        if (!entry.status) entry.status = 'open';
+        commit(); renderAll();
+      };
+      li.appendChild(star);
+    } else {
+      const spacer = document.createElement('span');
+      li.appendChild(spacer);
+    }
     const actions = document.createElement('span'); actions.className = 'actions';
     if ((entry.type === 'task' || entry.type === 'priority') && !['done','cancelled','migrated','scheduled'].includes(entry.status)) {
       const schedBtn = document.createElement('button'); schedBtn.textContent = 'Schedule';
@@ -697,12 +714,6 @@ function renderEntryList(ul, entries, opts = {}) {
       const m = document.createElement('button'); m.textContent = 'Migrate';
       m.onclick = () => opts.onMigrate(entry, idx);
       actions.appendChild(m);
-    }
-    if (entry.type === 'priority' && !['done','cancelled','migrated'].includes(entry.status)) {
-      const unp = document.createElement('button'); unp.textContent = '★→·';
-      unp.title = 'Demote to task';
-      unp.onclick = () => { entry.type = 'task'; entry.status = entry.status || 'open'; commit(); renderAll(); };
-      actions.appendChild(unp);
     }
     const del = document.createElement('button'); del.textContent = 'Delete';
     del.onclick = () => { entries.splice(idx, 1); commit(); renderAll(); };
