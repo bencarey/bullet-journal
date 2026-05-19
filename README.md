@@ -16,10 +16,14 @@ A minimal Mac app for keeping a bullet journal. Reads and writes a plain `.md` f
 
 1. Download `BulletJournal.dmg` from the [latest release](../../releases/latest)
 2. Open the DMG and drag **Bullet Journal** to **Applications**
-3. First launch: **right-click → Open** (one-time Gatekeeper bypass for unsigned apps)
-4. Select your `journal.md` file when prompted
+3. Open **Terminal** and run:
+   ```bash
+   xattr -dr com.apple.quarantine "/Applications/Bullet Journal.app"
+   ```
+4. Double-click **Bullet Journal** in Applications
+5. Select your `journal.md` file when prompted
 
-> **Note:** The app is ad-hoc signed but not notarized (no Apple Developer account). The right-click → Open step is only needed once per machine.
+> **Note:** The app is ad-hoc signed but not notarized (no Apple Developer account). Step 3 removes the macOS quarantine flag that blocks unsigned apps — it's a one-time step per machine. Without it, macOS 26 will silently refuse to launch the app.
 
 ## Data format
 
