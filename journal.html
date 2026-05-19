@@ -19,9 +19,14 @@
   body { min-height: 100vh; padding: 40px 32px 80px; }
   .frame { max-width: 880px; margin: 0 auto; }
 
+  .drag-bar { position: fixed; top: 0; left: 80px; right: 0; height: 40px; -webkit-app-region: drag; z-index: 9990; pointer-events: none; }
+
   .topbar { display: grid; grid-template-columns: 1fr auto; align-items: end; padding-bottom: 22px; border-bottom: 1px solid var(--line-strong); margin-bottom: 30px; }
+  .topbar-meta { -webkit-app-region: no-drag; }
+  nav { -webkit-app-region: drag; }
+  nav button { -webkit-app-region: no-drag; }
   .brand { display: flex; align-items: baseline; gap: 14px; }
-  h1 { font-size: 13px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; outline: none; }
+  h1 { font-size: 13px; font-weight: 600; letter-spacing: 0.18em; text-transform: uppercase; outline: none; -webkit-app-region: no-drag; }
   h1:focus { color: var(--accent); }
   .brand-mark { width: 10px; height: 10px; background: var(--accent); }
   .topbar-meta { display: flex; align-items: center; gap: 18px; font-size: 11px; color: var(--ink-3); letter-spacing: 0.04em; font-variant-numeric: tabular-nums; }
@@ -173,6 +178,7 @@
 </head>
 <body>
 
+<div class="drag-bar"></div>
 <div class="loading-overlay" id="loading">Loading journal.md…</div>
 
 <div class="frame">
