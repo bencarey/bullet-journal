@@ -415,13 +415,18 @@ function glyphFor(e) {
   }
   if (e.type === 'event') return '○';
   if (e.type === 'note') return '—';
-  if (e.type === 'priority') return e.status === 'migrated' ? '>' : '★';
+  if (e.type === 'priority') {
+    if (e.status === 'done') return '×';
+    if (e.status === 'cancelled') return '~';
+    if (e.status === 'migrated') return '>';
+    return '★';
+  }
   if (e.type === 'inspiration') return '!';
   return '·';
 }
 function cycleStatus(e) {
-  if (e.type !== 'task') return;
-  const order = ['open','done','migrated','cancelled','open'];
+  if (e.type !== 'task' && e.type !== 'priority') return;
+  const order = ['open','done','cancelled','open'];
   e.status = order[order.indexOf(e.status || 'open') + 1];
 }
 function newEntry(type, text, status) {
@@ -521,7 +526,12 @@ function fmt(e) {
   }
   if (e.type === 'event') return `- ○ ${e.text}`;
   if (e.type === 'note') return `- — ${e.text}`;
-  if (e.type === 'priority') return e.status === 'migrated' ? `- [>] ★ ${e.text}` : `- ★ ${e.text}`;
+  if (e.type === 'priority') {
+    if (e.status === 'done') return `- [x] ★ ${e.text}`;
+    if (e.status === 'cancelled') return `- [~] ★ ${e.text}`;
+    if (e.status === 'migrated') return `- [>] ★ ${e.text}`;
+    return `- ★ ${e.text}`;
+  }
   if (e.type === 'inspiration') return `- ! ${e.text}`;
   return `- ${e.text}`;
 }
@@ -636,7 +646,13 @@ function renderEntryList(ul, entries, opts = {}) {
     } else { li.style.gridTemplateColumns = '16px 1fr auto'; }
     const glyph = document.createElement('span');
     glyph.className = 'glyph'; glyph.textContent = glyphFor(entry);
-    glyph.onclick = (evt) => { if (entry.type === 'task') { cycleStatus(entry); if (entry.status === 'done') launchConfetti(evt.clientX, evt.clientY); commit(); renderAll(); } };
+    glyph.onclick = (evt) => {
+      if (entry.type === 'task' || entry.type === 'priority') {
+        cycleStatus(entry);
+        if (entry.status === 'done') launchConfetti(evt.clientX, evt.clientY);
+        commit(); renderAll();
+      }
+    };
     li.appendChild(glyph);
     const text = document.createElement('span');
     text.className = 'text'; text.contentEditable = 'true'; text.spellcheck = false;
@@ -681,6 +697,12 @@ function renderEntryList(ul, entries, opts = {}) {
       const m = document.createElement('button'); m.textContent = 'Migrate';
       m.onclick = () => opts.onMigrate(entry, idx);
       actions.appendChild(m);
+    }
+    if (entry.type === 'priority' && !['done','cancelled','migrated'].includes(entry.status)) {
+      const unp = document.createElement('button'); unp.textContent = '★→·';
+      unp.title = 'Demote to task';
+      unp.onclick = () => { entry.type = 'task'; entry.status = entry.status || 'open'; commit(); renderAll(); };
+      actions.appendChild(unp);
     }
     const del = document.createElement('button'); del.textContent = 'Delete';
     del.onclick = () => { entries.splice(idx, 1); commit(); renderAll(); };
