@@ -140,13 +140,18 @@
   .future-month .composer input { height: 26px; font-size: 13px; }
   .future-month .composer button.add { padding: 0 9px; height: 26px; }
 
-  .collections-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 28px; padding-bottom: 14px; border-bottom: 1px solid var(--line); }
-  .collections-bar select, .collections-bar input { height: 30px; border: 1px solid var(--line); background: var(--surface); padding: 0 10px; font: inherit; font-size: 13px; color: var(--ink); }
-  .collections-bar select { min-width: 170px; cursor: pointer; appearance: none; -webkit-appearance: none; padding-right: 26px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23888' d='M2 4l3 3 3-3z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 10px center; }
-  .collections-bar button { height: 30px; padding: 0 12px; background: var(--ink); color: white; border: none; font: inherit; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
-  .collections-bar button:hover { background: var(--accent); }
-  .collections-bar button.ghost { background: transparent; color: var(--ink-3); border: 1px solid var(--line); }
-  .collections-bar button.ghost:hover { color: var(--accent); border-color: var(--accent); }
+  .collection-tabs { display: flex; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 28px; gap: 0; }
+  .collection-tab { display: flex; align-items: center; gap: 5px; padding: 9px 14px 9px; font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 100ms; white-space: nowrap; }
+  .collection-tab:hover { color: var(--ink); }
+  .collection-tab.active { color: var(--ink); border-bottom-color: var(--accent); }
+  .collection-tab .tab-x { font-size: 13px; font-style: normal; color: var(--ink-4); line-height: 1; opacity: 0; margin-left: 1px; transition: opacity 80ms; }
+  .collection-tab:hover .tab-x { opacity: 1; }
+  .collection-tab .tab-x:hover { color: var(--accent); }
+  .collection-tab-add { padding: 8px 12px; font-size: 18px; line-height: 1; color: var(--ink-4); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .collection-tab-add:hover { color: var(--accent); }
+  .collection-tab-new { display: flex; align-items: center; gap: 6px; padding: 5px 8px; margin-bottom: -1px; }
+  .collection-tab-new input { height: 24px; border: none; border-bottom: 1px solid var(--accent); background: transparent; font: inherit; font-size: 11px; color: var(--ink); outline: none; width: 130px; }
+  .collection-tab-new button { height: 24px; padding: 0 10px; background: var(--accent); color: white; border: none; font: inherit; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
 
   .index-section { margin-bottom: 28px; }
   .index-section-head { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid var(--line); }
@@ -317,18 +322,9 @@
   </section>
 
   <section class="view" id="view-collections">
-    <div class="view-head">
-      <div><div class="view-label">Collection</div><div class="view-title" id="collectionTitle">—</div></div>
-      <div></div><div></div>
-    </div>
-    <div class="collections-bar">
-      <select id="collectionSelect"></select>
-      <input type="text" id="newCollectionName" placeholder="New collection name" autocomplete="off">
-      <button id="addCollectionBtn">Create</button>
-      <button id="deleteCollectionBtn" class="ghost">Delete</button>
-    </div>
+    <div id="collectionTabs" class="collection-tabs"></div>
     <ul class="entry-list" id="collectionEntries"></ul>
-    <div class="composer" id="collectionAddRow">
+    <div class="composer" id="collectionAddRow" style="display:none">
       <span class="spacer">+</span>
       <select id="collectionType">
         <option value="task">Task ·</option>
@@ -1002,25 +998,61 @@ function renderFuture() {
 }
 
 function renderCollections() {
-  const select = document.getElementById('collectionSelect');
   const names = Object.keys(state.collections);
   if (names.length && !state.activeCollection) state.activeCollection = names[0];
-  select.innerHTML = '';
+
+  const tabBar = document.getElementById('collectionTabs');
+  tabBar.innerHTML = '';
+
   names.forEach(n => {
-    const opt = document.createElement('option');
-    opt.value = n; opt.textContent = n;
-    if (n === state.activeCollection) opt.selected = true;
-    select.appendChild(opt);
+    const tab = document.createElement('div');
+    tab.className = 'collection-tab' + (n === state.activeCollection ? ' active' : '');
+    tab.innerHTML = `<span>${n}</span><span class="tab-x" title="Delete">×</span>`;
+    tab.querySelector('span:first-child').onclick = () => {
+      state.activeCollection = n; commit(); renderAll();
+    };
+    tab.querySelector('.tab-x').onclick = (e) => {
+      e.stopPropagation();
+      showModal(`Delete "${n}"?`, 'All entries in this collection will be removed.', () => {
+        delete state.collections[n];
+        if (state.activeCollection === n) state.activeCollection = Object.keys(state.collections)[0] || null;
+        commit(); renderAll();
+      });
+    };
+    tabBar.appendChild(tab);
   });
-  document.getElementById('collectionTitle').textContent = state.activeCollection || '—';
+
+  // + button
+  const addBtn = document.createElement('div');
+  addBtn.className = 'collection-tab-add'; addBtn.textContent = '+'; addBtn.title = 'New collection';
+  addBtn.onclick = () => {
+    addBtn.style.display = 'none';
+    const newRow = document.createElement('div'); newRow.className = 'collection-tab-new';
+    newRow.innerHTML = `<input id="newTabInput" placeholder="Collection name" autocomplete="off"><button id="newTabConfirm">Create</button>`;
+    tabBar.appendChild(newRow);
+    const inp = document.getElementById('newTabInput');
+    const confirm = () => {
+      const name = inp.value.trim(); if (!name) { renderAll(); return; }
+      if (state.collections[name]) { toast('Already exists'); return; }
+      state.collections[name] = []; state.activeCollection = name;
+      commit(); renderAll();
+    };
+    document.getElementById('newTabConfirm').onclick = confirm;
+    inp.addEventListener('keydown', e => {
+      if (e.key === 'Enter') confirm();
+      if (e.key === 'Escape') renderAll();
+    });
+    setTimeout(() => inp.focus(), 0);
+  };
+  tabBar.appendChild(addBtn);
+
   const ul = document.getElementById('collectionEntries');
+  const addRow = document.getElementById('collectionAddRow');
   if (!state.activeCollection || !state.collections[state.activeCollection]) {
-    ul.innerHTML = '';
-    document.getElementById('collectionAddRow').style.display = 'none';
-    return;
+    ul.innerHTML = ''; addRow.style.display = 'none'; return;
   }
-  document.getElementById('collectionAddRow').style.display = '';
-  renderEntryList(ul, state.collections[state.activeCollection], { emptyMsg: 'Empty.' });
+  addRow.style.display = '';
+  renderEntryList(ul, state.collections[state.activeCollection], { emptyMsg: 'Empty collection.' });
 }
 
 function renderIndex() {
@@ -1160,25 +1192,6 @@ document.getElementById('monthlyInput').addEventListener('keydown', e => { if (e
 document.getElementById('prevYear').onclick = () => { state.activeYear--; commit(); renderAll(); };
 document.getElementById('nextYear').onclick = () => { state.activeYear++; commit(); renderAll(); };
 
-document.getElementById('collectionSelect').onchange = e => { state.activeCollection = e.target.value; commit(); renderAll(); };
-document.getElementById('addCollectionBtn').onclick = () => {
-  const i = document.getElementById('newCollectionName');
-  const name = i.value.trim(); if (!name) return;
-  if (state.collections[name]) { toast('Collection exists'); return; }
-  state.collections[name] = []; state.activeCollection = name;
-  i.value = ''; commit(); renderAll();
-};
-document.getElementById('newCollectionName').addEventListener('keydown', e => {
-  if (e.key === 'Enter') document.getElementById('addCollectionBtn').click();
-});
-document.getElementById('deleteCollectionBtn').onclick = () => {
-  if (!state.activeCollection) return;
-  showModal('Delete collection', `"${state.activeCollection}" and its items will be removed.`, () => {
-    delete state.collections[state.activeCollection];
-    state.activeCollection = Object.keys(state.collections)[0] || null;
-    commit(); renderAll();
-  });
-};
 function addToCollection() {
   if (!state.activeCollection) return;
   const i = document.getElementById('collectionInput');
