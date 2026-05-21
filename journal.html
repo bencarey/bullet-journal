@@ -76,6 +76,8 @@
   .entry[draggable="true"] .num { cursor: grab; }
   .entry.priority:not(.migrated) { background: #fdf5f0; }
   .entry.priority:not(.migrated):hover { background: #fbeae2; }
+  .entry.selected { background: var(--surface) !important; }
+  .entry.selected .actions { opacity: 1; }
   @keyframes sheen {
     0%   { background-position: 200% center; }
     100% { background-position: -200% center; }
@@ -182,6 +184,17 @@
   .toast { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--ink); color: white; padding: 9px 18px; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; transition: transform 200ms ease; z-index: 200; }
   .toast.show { transform: translateX(-50%) translateY(0); }
 
+  #format-toolbar { position: fixed; display: none; align-items: center; background: var(--ink); border-radius: 5px; padding: 3px 4px; gap: 1px; z-index: 600; box-shadow: 0 2px 8px rgba(0,0,0,0.25); }
+  #format-toolbar.visible { display: flex; }
+  #format-toolbar button { background: none; border: none; color: white; cursor: pointer; padding: 4px 8px; font-size: 12px; border-radius: 3px; line-height: 1; }
+  #format-toolbar button:hover { background: rgba(255,255,255,0.15); }
+  #format-toolbar .sep { width: 1px; height: 14px; background: rgba(255,255,255,0.2); margin: 0 2px; }
+  #format-toolbar input { background: rgba(255,255,255,0.12); border: none; border-bottom: 1px solid rgba(255,255,255,0.4); color: white; font: inherit; font-size: 11px; padding: 2px 6px; outline: none; width: 160px; }
+  #format-toolbar input::placeholder { color: rgba(255,255,255,0.4); }
+  .entry .text a { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; cursor: pointer; }
+  .entry .text strong { font-weight: 600; }
+  .entry .text em { font-style: italic; }
+
   .loading-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); z-index: 1000; font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
   .loading-overlay.hidden { display: none; }
 
@@ -194,6 +207,12 @@
 <body>
 
 <div class="drag-bar"></div>
+<div id="format-toolbar">
+  <button data-fmt="bold" title="Bold"><strong>B</strong></button>
+  <button data-fmt="italic" title="Italic"><em>I</em></button>
+  <div class="sep"></div>
+  <button data-fmt="link" title="Link">🔗</button>
+</div>
 <div class="loading-overlay" id="loading">Loading journal.md…</div>
 
 <div class="frame">
@@ -405,6 +424,8 @@ function defaultState() {
 }
 let state = defaultState();
 const inProgress = new Set(); // ephemeral — visual only, not saved
+let selectedEntryId = null;
+let visibleEntryIds = []; // populated by renderEntryList, used for up/down nav
 let writeTimer = null;
 let lastWrittenMd = '';
 let lastSeenMtime = 0;
@@ -421,6 +442,19 @@ function shiftDay(iso, d) { const [y,m,da]=iso.split('-').map(Number); const x=n
 function shiftMonth(iso, n) { const [y,m]=iso.split('-').map(Number); const x=new Date(y,m-1,1); x.setMonth(x.getMonth()+n); return `${x.getFullYear()}-${pad(x.getMonth()+1)}`; }
 
 /* ---------- entry model ---------- */
+function renderInlineMarkdown(text) {
+  let s = text
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // bold **text**
+  s = s.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  // italic *text* (single stars, not double)
+  s = s.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+  // link [label](url)
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
+    '<a data-href="$2">$1</a>');
+  return s;
+}
+
 function glyphFor(e) {
   if (e.type === 'task') {
     if (e.status === 'done') return '×';
@@ -643,6 +677,7 @@ function loadPrefs() {
 /* ---------- render ---------- */
 function renderEntryList(ul, entries, opts = {}) {
   ul.innerHTML = '';
+  if (opts.primary) visibleEntryIds = []; // reset nav list for primary list only
   if (!entries || !entries.length) {
     const li = document.createElement('li'); li.className = 'empty';
     li.textContent = opts.emptyMsg || 'No entries.';
@@ -656,6 +691,8 @@ function renderEntryList(ul, entries, opts = {}) {
     if (entry.status === 'migrated') li.classList.add('migrated');
     if (entry.status === 'scheduled') li.classList.add('scheduled');
     if (inProgress.has(entry.id)) li.classList.add('in-progress');
+    if (entry.id === selectedEntryId) li.classList.add('selected');
+    if (opts.primary) visibleEntryIds.push(entry.id);
     if (!opts.hideNum) {
       const num = document.createElement('span'); num.className = 'num';
       num.textContent = String(idx + 1).padStart(3, '0');
@@ -673,13 +710,28 @@ function renderEntryList(ul, entries, opts = {}) {
     li.appendChild(glyph);
     const text = document.createElement('span');
     text.className = 'text'; text.contentEditable = 'true'; text.spellcheck = false;
-    text.textContent = entry.text;
+    text.innerHTML = renderInlineMarkdown(entry.text);
+    text.addEventListener('focus', () => {
+      text.textContent = entry.text;
+      // place cursor at end
+      const r = document.createRange(); r.selectNodeContents(text); r.collapse(false);
+      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    });
     text.addEventListener('blur', () => {
       const v = text.textContent.trim();
       if (v) { entry.text = v; commit(); }
-      else { text.textContent = entry.text; }
+      text.innerHTML = renderInlineMarkdown(entry.text);
     });
     text.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); text.blur(); } });
+    text.addEventListener('click', e => {
+      const a = e.target.closest('a[data-href]');
+      if (a && !text.isEqualNode(document.activeElement)) {
+        e.preventDefault();
+        const url = a.dataset.href;
+        if (window.electronAPI?.openExternal) window.electronAPI.openExternal(url);
+        else window.open(url, '_blank');
+      }
+    });
     li.appendChild(text);
     const actions = document.createElement('span'); actions.className = 'actions';
     if ((entry.type === 'task' || entry.type === 'priority') && !['done','cancelled','migrated','scheduled'].includes(entry.status)) {
@@ -784,6 +836,7 @@ function renderHeader() {
 
 function setView(view) {
   state.view = view;
+  selectedEntryId = null;
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.toggle('active', b.dataset.view === view));
   document.querySelectorAll('.view').forEach(v => v.classList.toggle('active', v.id === `view-${view}`));
   savePrefs();
@@ -815,6 +868,7 @@ function renderDaily() {
   renderEntryList(document.getElementById('dailyEntries'), list, {
     emptyMsg: 'A blank day.',
     reorderable: true,
+    primary: true,
     onMigrate: (entry) => {
       entry.status = 'migrated';
       const t = shiftDay(state.activeDate, 1);
@@ -1156,6 +1210,174 @@ document.getElementById('refreshBtn').onclick = async () => {
     toast('Re-read journal.md');
   } catch (e) { toast('Re-read failed'); }
 };
+
+/* ---------- format toolbar ---------- */
+const fmtToolbar = document.getElementById('format-toolbar');
+let savedRange = null;
+
+function positionToolbar(rect) {
+  const tbW = fmtToolbar.offsetWidth || 140;
+  let x = rect.left + rect.width / 2 - tbW / 2;
+  let y = rect.top - fmtToolbar.offsetHeight - 8;
+  if (y < 8) y = rect.bottom + 8;
+  x = Math.max(8, Math.min(x, window.innerWidth - tbW - 8));
+  fmtToolbar.style.left = x + 'px';
+  fmtToolbar.style.top  = y + 'px';
+}
+
+function showToolbar(rect) {
+  fmtToolbar.classList.add('visible');
+  positionToolbar(rect);
+}
+
+function hideToolbar() {
+  fmtToolbar.classList.remove('visible');
+  fmtToolbar.innerHTML = `
+    <button data-fmt="bold" title="Bold"><strong>B</strong></button>
+    <button data-fmt="italic" title="Italic"><em>I</em></button>
+    <div class="sep"></div>
+    <button data-fmt="link" title="Link">🔗</button>`;
+  savedRange = null;
+}
+
+function applyFormat(fmt) {
+  const sel = window.getSelection();
+  // restore saved range if selection was lost on button click
+  if (savedRange && (!sel.rangeCount || sel.isCollapsed)) {
+    sel.removeAllRanges(); sel.addRange(savedRange);
+  }
+  if (!sel.rangeCount || sel.isCollapsed) return;
+  const range = sel.getRangeAt(0);
+  const selected = range.toString();
+  if (!selected) return;
+
+  // find the contenteditable .text ancestor
+  const container = range.commonAncestorContainer;
+  const textEl = container.nodeType === 3
+    ? container.parentElement.closest('.text')
+    : container.closest('.text');
+  if (!textEl) return;
+
+  if (fmt === 'bold')   { insertAround(range, '**', '**'); }
+  if (fmt === 'italic') { insertAround(range, '*', '*'); }
+  if (fmt === 'link') {
+    showLinkInput(selected, range, textEl);
+    return;
+  }
+  hideToolbar();
+}
+
+function insertAround(range, before, after) {
+  const text = range.toString();
+  const node = document.createTextNode(before + text + after);
+  range.deleteContents();
+  range.insertNode(node);
+  // save back to entry — walk up to .text then find the li
+  const textEl = node.parentElement.closest('.text');
+  if (textEl) { textEl.dispatchEvent(new Event('blur')); }
+  hideToolbar();
+}
+
+function showLinkInput(selectedText, range, textEl) {
+  fmtToolbar.innerHTML = `
+    <input id="linkUrlInput" placeholder="https://…" />
+    <button id="linkConfirm">→</button>`;
+  const inp = document.getElementById('linkUrlInput');
+  const btn = document.getElementById('linkConfirm');
+  setTimeout(() => inp.focus(), 0);
+
+  const confirm = () => {
+    const url = inp.value.trim();
+    if (!url) { hideToolbar(); return; }
+    const node = document.createTextNode(`[${selectedText}](${url})`);
+    range.deleteContents();
+    range.insertNode(node);
+    textEl.dispatchEvent(new Event('blur'));
+    hideToolbar();
+  };
+  btn.addEventListener('mousedown', e => { e.preventDefault(); confirm(); });
+  inp.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); confirm(); }
+    if (e.key === 'Escape') hideToolbar();
+  });
+}
+
+// Show toolbar when text is selected inside a .text span
+document.addEventListener('selectionchange', () => {
+  const sel = window.getSelection();
+  if (!sel || sel.isCollapsed || !sel.rangeCount) { hideToolbar(); return; }
+  const range = sel.getRangeAt(0);
+  const container = range.commonAncestorContainer;
+  const textEl = container.nodeType === 3
+    ? container.parentElement.closest('.text')
+    : container.closest('.text');
+  if (!textEl) { hideToolbar(); return; }
+  savedRange = range.cloneRange();
+  const rect = range.getBoundingClientRect();
+  if (rect.width === 0) { hideToolbar(); return; }
+  showToolbar(rect);
+});
+
+// mousedown on buttons — prevent blur so selection is kept
+fmtToolbar.addEventListener('mousedown', e => {
+  const btn = e.target.closest('[data-fmt]');
+  if (btn) { e.preventDefault(); applyFormat(btn.dataset.fmt); }
+});
+
+/* ---------- keyboard shortcuts ---------- */
+document.addEventListener('keydown', e => {
+  const tag = document.activeElement ? document.activeElement.tagName : '';
+  const editable = document.activeElement && document.activeElement.isContentEditable;
+  const typing = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || editable;
+
+  // Cmd+T — go to today
+  if (e.key === 't' && e.metaKey && !e.shiftKey) {
+    e.preventDefault();
+    state.activeDate = todayISO();
+    setView('daily');
+    commit(); renderAll();
+    return;
+  }
+
+  // Arrow left/right — prev/next day (only in daily view, not while typing)
+  if (!typing && state.view === 'daily') {
+    if (e.key === 'ArrowLeft') {
+      e.preventDefault();
+      selectedEntryId = null;
+      state.activeDate = shiftDay(state.activeDate, -1);
+      commit(); renderAll(); return;
+    }
+    if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      selectedEntryId = null;
+      state.activeDate = shiftDay(state.activeDate, 1);
+      commit(); renderAll(); return;
+    }
+  }
+
+  // Arrow up/down — navigate entries
+  if (!typing) {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (!visibleEntryIds.length) return;
+      const cur = visibleEntryIds.indexOf(selectedEntryId);
+      if (e.key === 'ArrowUp') {
+        selectedEntryId = cur <= 0 ? visibleEntryIds[visibleEntryIds.length - 1] : visibleEntryIds[cur - 1];
+      } else {
+        selectedEntryId = cur < 0 || cur >= visibleEntryIds.length - 1 ? visibleEntryIds[0] : visibleEntryIds[cur + 1];
+      }
+      renderAll();
+      // scroll selected entry into view
+      const el = document.querySelector('.entry.selected');
+      if (el) el.scrollIntoView({ block: 'nearest' });
+      return;
+    }
+    // Escape — deselect
+    if (e.key === 'Escape' && selectedEntryId) {
+      selectedEntryId = null; renderAll(); return;
+    }
+  }
+});
 
 let modalCb = null;
 function showModal(title, msg, onConfirm) {

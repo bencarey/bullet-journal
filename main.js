@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, Menu } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, Menu, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -117,6 +117,10 @@ ipcMain.handle('write-journal', (_, content) => {
 
 ipcMain.handle('get-journal-mtime', () => {
   try { return mdFilePath ? fs.statSync(mdFilePath).mtimeMs : 0; } catch { return 0; }
+});
+
+ipcMain.handle('open-external', (_, url) => {
+  shell.openExternal(url);
 });
 
 app.whenReady().then(createWindow);
