@@ -763,10 +763,17 @@ function renderEntryList(ul, entries, opts = {}) {
       m.onclick = () => opts.onMigrate(entry, idx);
       actions.appendChild(m);
     }
+    if (entry.type === 'task' && !['done','cancelled','migrated'].includes(entry.status)) {
+      const pri = document.createElement('button'); pri.textContent = '★';
+      pri.title = 'Promote to priority';
+      pri.onclick = () => { entry.type = 'priority'; commit(); renderAll(); };
+      actions.appendChild(pri);
+    }
     if (entry.type === 'priority' && !['done','cancelled','migrated'].includes(entry.status)) {
-      const unp = document.createElement('button'); unp.textContent = '★→·';
+      const unp = document.createElement('button'); unp.textContent = '★';
       unp.title = 'Demote to task';
-      unp.onclick = () => { entry.type = 'task'; entry.status = entry.status || 'open'; commit(); renderAll(); };
+      unp.style.textDecoration = 'line-through';
+      unp.onclick = () => { entry.type = 'task'; commit(); renderAll(); };
       actions.appendChild(unp);
     }
     if ((entry.type === 'task' || entry.type === 'priority') && !['done','cancelled','migrated'].includes(entry.status)) {
