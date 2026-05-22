@@ -760,7 +760,7 @@ function renderEntryList(ul, entries, opts = {}) {
       actions.appendChild(unp);
     }
     const del = document.createElement('button'); del.textContent = 'Delete';
-    del.onclick = () => { entries.splice(idx, 1); commit(); renderAll(); };
+    del.onclick = () => { launchBurn(li, () => { entries.splice(idx, 1); commit(); renderAll(); }); };
     actions.appendChild(del);
     li.appendChild(actions);
 
@@ -1418,6 +1418,70 @@ function launchConfetti(originX, originY) {
       ctx.restore();
     });
     if (t < DURATION) requestAnimationFrame(tick); else canvas.remove();
+  })(performance.now());
+}
+
+function launchBurn(el, onComplete) {
+  const rect = el.getBoundingClientRect();
+
+  // fade + shrink the row itself
+  el.style.transition = 'opacity 500ms ease, transform 500ms ease';
+  el.style.transformOrigin = 'center top';
+  requestAnimationFrame(() => {
+    el.style.opacity = '0';
+    el.style.transform = 'scaleY(0.3)';
+  });
+
+  // canvas pinned over the row, tall enough for embers to rise
+  const canvas = document.createElement('canvas');
+  const pad = 60;
+  canvas.style.cssText = `position:fixed;left:${rect.left - 8}px;top:${rect.top - pad}px;pointer-events:none;z-index:9999;`;
+  canvas.width  = rect.width + 16;
+  canvas.height = rect.height + pad + 40;
+  document.body.appendChild(canvas);
+  const ctx = canvas.getContext('2d');
+  const offY = pad; // y-offset so row appears at correct position within canvas
+
+  const colors = ['#d65427','#ff6b2b','#f5a623','#ffcc44','#ff4500','#ff8c42'];
+  const embers = Array.from({ length: 55 }, () => ({
+    x: Math.random() * (rect.width + 16),
+    y: offY + Math.random() * rect.height,
+    vx: (Math.random() - 0.5) * 1.6,
+    vy: -(Math.random() * 2.5 + 0.8),
+    size: Math.random() * 2.8 + 0.6,
+    life: 0.6 + Math.random() * 0.4,
+    decay: Math.random() * 0.018 + 0.012,
+    color: colors[Math.floor(Math.random() * colors.length)]
+  }));
+
+  let start = null;
+  const DURATION = 700;
+  (function tick(ts) {
+    if (!start) start = ts;
+    const t = ts - start;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let any = false;
+    embers.forEach(p => {
+      if (p.life <= 0) return;
+      any = true;
+      p.x  += p.vx;
+      p.y  += p.vy;
+      p.vy -= 0.04;
+      p.vx += (Math.random() - 0.5) * 0.25;
+      p.life -= p.decay;
+      ctx.globalAlpha = Math.max(0, p.life);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.size * Math.max(0.1, p.life), 0, Math.PI * 2);
+      ctx.fill();
+    });
+    ctx.globalAlpha = 1;
+    if (t < DURATION || any) {
+      requestAnimationFrame(tick);
+    } else {
+      canvas.remove();
+      onComplete();
+    }
   })(performance.now());
 }
 
