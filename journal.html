@@ -78,21 +78,6 @@
   .entry.priority:not(.migrated):hover { background: #fbeae2; }
   .entry.selected { background: var(--surface) !important; }
   .entry.selected .actions { opacity: 1; }
-  @keyframes sheen {
-    0%   { background-position: 200% center; }
-    100% { background-position: -200% center; }
-  }
-  .entry.in-progress {
-    background: linear-gradient(90deg, transparent 20%, rgba(214,84,39,0.07) 50%, transparent 80%) !important;
-    background-size: 300% auto !important;
-    animation: sheen 2.4s linear infinite;
-  }
-  .entry.in-progress:hover {
-    background: linear-gradient(90deg, rgba(255,255,255,0.4) 20%, rgba(214,84,39,0.11) 50%, rgba(255,255,255,0.4) 80%) !important;
-    background-size: 300% auto !important;
-  }
-  .entry .progress-btn { font-size: 11px !important; letter-spacing: 0 !important; text-transform: none !important; }
-  .entry.in-progress .progress-btn { color: var(--accent) !important; opacity: 1 !important; }
   .entry.priority .glyph { color: var(--accent); }
   .entry .actions { display: flex; gap: 12px; opacity: 0; transition: opacity 120ms; }
   .entry:hover .actions { opacity: 1; }
@@ -419,7 +404,6 @@ function defaultState() {
   };
 }
 let state = defaultState();
-const inProgress = new Set(); // ephemeral — visual only, not saved
 let selectedEntryId = null;
 let visibleEntryIds = []; // populated by renderEntryList, used for up/down nav
 let writeTimer = null;
@@ -686,7 +670,6 @@ function renderEntryList(ul, entries, opts = {}) {
     if (entry.status === 'cancelled') li.classList.add('cancelled');
     if (entry.status === 'migrated') li.classList.add('migrated');
     if (entry.status === 'scheduled') li.classList.add('scheduled');
-    if (inProgress.has(entry.id)) li.classList.add('in-progress');
     if (entry.id === selectedEntryId) li.classList.add('selected');
     if (opts.primary) visibleEntryIds.push(entry.id);
     if (!opts.hideNum) {
@@ -775,18 +758,6 @@ function renderEntryList(ul, entries, opts = {}) {
       unp.style.textDecoration = 'line-through';
       unp.onclick = () => { entry.type = 'task'; commit(); renderAll(); };
       actions.appendChild(unp);
-    }
-    if ((entry.type === 'task' || entry.type === 'priority') && !['done','cancelled','migrated'].includes(entry.status)) {
-      const prog = document.createElement('button');
-      prog.className = 'progress-btn';
-      prog.textContent = inProgress.has(entry.id) ? '▶ In Progress' : '▶';
-      prog.title = 'Toggle in progress';
-      prog.onclick = () => {
-        if (inProgress.has(entry.id)) inProgress.delete(entry.id);
-        else inProgress.add(entry.id);
-        renderAll();
-      };
-      actions.appendChild(prog);
     }
     const del = document.createElement('button'); del.textContent = 'Delete';
     del.onclick = () => { entries.splice(idx, 1); commit(); renderAll(); };
