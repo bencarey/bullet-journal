@@ -689,14 +689,15 @@ function renderEntryList(ul, entries, opts = {}) {
     li.appendChild(glyph);
     const text = document.createElement('span');
     text.className = 'text'; text.contentEditable = 'true'; text.spellcheck = false;
+    text._entry = entry;
     text.innerHTML = renderInlineMarkdown(entry.text);
     text.addEventListener('focus', () => {
       text.textContent = entry.text;
-      // place cursor at end
       const r = document.createRange(); r.selectNodeContents(text); r.collapse(false);
       const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
     });
     text.addEventListener('blur', () => {
+      if (text._fmtLock) return; // toolbar interaction in progress
       const v = text.textContent.trim();
       if (v) { entry.text = v; commit(); }
       text.innerHTML = renderInlineMarkdown(entry.text);
@@ -1204,115 +1205,121 @@ document.getElementById('refreshBtn').onclick = async () => {
 
 /* ---------- format toolbar ---------- */
 const fmtToolbar = document.getElementById('format-toolbar');
-let savedRange = null;
 
-function positionToolbar(rect) {
-  const tbW = fmtToolbar.offsetWidth || 140;
-  let x = rect.left + rect.width / 2 - tbW / 2;
-  let y = rect.top - fmtToolbar.offsetHeight - 8;
-  if (y < 8) y = rect.bottom + 8;
-  x = Math.max(8, Math.min(x, window.innerWidth - tbW - 8));
-  fmtToolbar.style.left = x + 'px';
-  fmtToolbar.style.top  = y + 'px';
-}
+// Saved at selectionchange time: char offsets into entry.text, plus refs
+let fmtSel = null; // { start, end, selected, textEl, entry }
 
-function showToolbar(rect) {
-  fmtToolbar.classList.add('visible');
-  positionToolbar(rect);
-}
-
-function hideToolbar() {
-  fmtToolbar.classList.remove('visible');
+function fmtToolbarReset() {
   fmtToolbar.innerHTML = `
     <button data-fmt="bold" title="Bold"><strong>B</strong></button>
     <button data-fmt="italic" title="Italic"><em>I</em></button>
     <div class="sep"></div>
     <button data-fmt="link" title="Link">🔗</button>`;
-  savedRange = null;
+}
+fmtToolbarReset();
+
+function hideToolbar() {
+  fmtToolbar.classList.remove('visible');
+  fmtToolbarReset();
+  if (fmtSel) { fmtSel.textEl._fmtLock = false; fmtSel = null; }
 }
 
-function applyFormat(fmt) {
+function showToolbar(selRect) {
+  // measure toolbar while briefly visible off-screen to get real dimensions
+  fmtToolbar.style.visibility = 'hidden';
+  fmtToolbar.classList.add('visible');
+  const tbW = fmtToolbar.offsetWidth;
+  const tbH = fmtToolbar.offsetHeight;
+  fmtToolbar.style.visibility = '';
+
+  let x = selRect.left + selRect.width / 2 - tbW / 2;
+  let y = selRect.top - tbH - 8;
+  if (y < 8) y = selRect.bottom + 8;
+  x = Math.max(8, Math.min(x, window.innerWidth - tbW - 8));
+  fmtToolbar.style.left = x + 'px';
+  fmtToolbar.style.top  = y + 'px';
+}
+
+// Get character offsets of the selection within a contenteditable element
+function getCharOffsets(el) {
   const sel = window.getSelection();
-  // restore saved range if selection was lost on button click
-  if (savedRange && (!sel.rangeCount || sel.isCollapsed)) {
-    sel.removeAllRanges(); sel.addRange(savedRange);
-  }
-  if (!sel.rangeCount || sel.isCollapsed) return;
+  if (!sel || !sel.rangeCount) return null;
   const range = sel.getRangeAt(0);
+  const pre = range.cloneRange();
+  pre.selectNodeContents(el);
+  pre.setEnd(range.startContainer, range.startOffset);
+  const start = pre.toString().length;
   const selected = range.toString();
-  if (!selected) return;
-
-  // find the contenteditable .text ancestor
-  const container = range.commonAncestorContainer;
-  const textEl = container.nodeType === 3
-    ? container.parentElement.closest('.text')
-    : container.closest('.text');
-  if (!textEl) return;
-
-  if (fmt === 'bold')   { insertAround(range, '**', '**'); }
-  if (fmt === 'italic') { insertAround(range, '*', '*'); }
-  if (fmt === 'link') {
-    showLinkInput(selected, range, textEl);
-    return;
-  }
-  hideToolbar();
+  return selected ? { start, end: start + selected.length, selected } : null;
 }
 
-function insertAround(range, before, after) {
-  const text = range.toString();
-  const node = document.createTextNode(before + text + after);
-  range.deleteContents();
-  range.insertNode(node);
-  // save back to entry — walk up to .text then find the li
-  const textEl = node.parentElement.closest('.text');
-  if (textEl) { textEl.dispatchEvent(new Event('blur')); }
+// Apply formatting via string splicing — no DOM range juggling
+function applyFmt(fmt, url) {
+  if (!fmtSel) return;
+  const { start, end, selected, textEl, entry } = fmtSel;
+  // entry.text may differ from textEl.textContent if user typed since focus;
+  // use textEl.textContent as source of truth and sync back
+  const raw = textEl.textContent;
+  let replacement;
+  if (fmt === 'bold')   replacement = `**${selected}**`;
+  if (fmt === 'italic') replacement = `*${selected}*`;
+  if (fmt === 'link')   replacement = `[${selected}](${url})`;
+  entry.text = raw.slice(0, start) + replacement + raw.slice(end);
+  textEl._fmtLock = false;
   hideToolbar();
+  commit(); renderAll();
 }
 
-function showLinkInput(selectedText, range, textEl) {
-  fmtToolbar.innerHTML = `
-    <input id="linkUrlInput" placeholder="https://…" />
-    <button id="linkConfirm">→</button>`;
+function showLinkInput() {
+  fmtToolbarReset(); // clear buttons first so we can replace
+  fmtToolbar.innerHTML = `<input id="linkUrlInput" placeholder="https://…" autocomplete="off"><button id="linkConfirm" data-action="confirm">→</button>`;
   const inp = document.getElementById('linkUrlInput');
-  const btn = document.getElementById('linkConfirm');
   setTimeout(() => inp.focus(), 0);
-
-  const confirm = () => {
-    const url = inp.value.trim();
-    if (!url) { hideToolbar(); return; }
-    const node = document.createTextNode(`[${selectedText}](${url})`);
-    range.deleteContents();
-    range.insertNode(node);
-    textEl.dispatchEvent(new Event('blur'));
-    hideToolbar();
-  };
-  btn.addEventListener('mousedown', e => { e.preventDefault(); confirm(); });
   inp.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); confirm(); }
-    if (e.key === 'Escape') hideToolbar();
+    if (e.key === 'Enter')  { e.preventDefault(); applyFmt('link', inp.value.trim()); }
+    if (e.key === 'Escape') { hideToolbar(); }
   });
 }
 
-// Show toolbar when text is selected inside a .text span
+// Show toolbar on text selection inside a .text element
 document.addEventListener('selectionchange', () => {
+  // ignore if we're in the link URL input
+  if (document.activeElement && document.activeElement.id === 'linkUrlInput') return;
   const sel = window.getSelection();
   if (!sel || sel.isCollapsed || !sel.rangeCount) { hideToolbar(); return; }
   const range = sel.getRangeAt(0);
   const container = range.commonAncestorContainer;
-  const textEl = container.nodeType === 3
-    ? container.parentElement.closest('.text')
-    : container.closest('.text');
+  const textEl = (container.nodeType === 3 ? container.parentElement : container).closest('.text');
   if (!textEl) { hideToolbar(); return; }
-  savedRange = range.cloneRange();
+  const offsets = getCharOffsets(textEl);
+  if (!offsets) { hideToolbar(); return; }
+  fmtSel = { ...offsets, textEl, entry: textEl._entry };
   const rect = range.getBoundingClientRect();
-  if (rect.width === 0) { hideToolbar(); return; }
+  if (!rect.width) { hideToolbar(); return; }
   showToolbar(rect);
 });
 
-// mousedown on buttons — prevent blur so selection is kept
+// Handle toolbar button clicks — mousedown+preventDefault keeps selection alive
 fmtToolbar.addEventListener('mousedown', e => {
   const btn = e.target.closest('[data-fmt]');
-  if (btn) { e.preventDefault(); applyFormat(btn.dataset.fmt); }
+  if (!btn) return;
+  e.preventDefault();
+  if (!fmtSel) return;
+  if (btn.dataset.fmt === 'link') {
+    fmtSel.textEl._fmtLock = true; // prevent blur from switching to rendered HTML
+    showLinkInput();
+  } else {
+    applyFmt(btn.dataset.fmt);
+  }
+});
+
+// Confirm link via the → button
+fmtToolbar.addEventListener('mousedown', e => {
+  const btn = e.target.closest('[data-action="confirm"]');
+  if (!btn) return;
+  e.preventDefault();
+  const inp = document.getElementById('linkUrlInput');
+  if (inp) applyFmt('link', inp.value.trim());
 });
 
 /* ---------- keyboard shortcuts ---------- */
