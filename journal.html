@@ -83,24 +83,21 @@
   .entry.priority:not(.migrated):hover { background: #fbeae2; }
   .entry.commitment:not(.done):not(.cancelled):not(.migrated) { background: var(--commit-soft); }
   .entry.commitment:not(.done):not(.cancelled):not(.migrated):hover { background: #dde6f4; }
-  .entry.commitment { align-items: start; }
-  .entry.commitment .glyph { padding-top: 3px; }
-  .entry.commitment .num { padding-top: 3px; }
-  .entry.commitment .actions { padding-top: 2px; }
   .entry.commitment .glyph { color: var(--commit); }
   .entry.commitment.done .glyph, .entry.commitment.cancelled .glyph, .entry.commitment.migrated .glyph { color: var(--ink-4); }
   .entry.commitment.done .text, .entry.commitment.cancelled .text, .entry.commitment.migrated .text { color: var(--done); }
-  .commit-meta { display: flex; gap: 16px; margin-top: 5px; flex-wrap: wrap; }
-  .commit-meta-field { display: flex; align-items: center; gap: 4px; }
-  .commit-meta-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-4); user-select: none; }
-  .commit-meta-input { background: none; border: none; border-bottom: 1px solid transparent; font: inherit; font-size: 12px; color: var(--ink-3); outline: none; padding: 1px 2px; min-width: 60px; width: auto; transition: border-color 100ms, color 100ms; }
-  .commit-meta-input:hover { border-bottom-color: var(--line-strong); color: var(--ink-2); }
-  .commit-meta-input:focus { border-bottom-color: var(--commit); color: var(--ink); }
-  .commit-meta-input.empty { color: var(--ink-4); font-style: italic; }
-  .entry.commitment.done .commit-meta-label,
-  .entry.commitment.done .commit-meta-input,
-  .entry.commitment.cancelled .commit-meta-label,
-  .entry.commitment.cancelled .commit-meta-input { opacity: 0.4; }
+  .commit-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0; min-width: 0; }
+  .commit-tag { display: inline-flex; align-items: center; gap: 3px; margin-left: 10px; opacity: 0; transition: opacity 100ms; flex-shrink: 0; }
+  .commit-tag.has-value { opacity: 1; }
+  .entry:hover .commit-tag,
+  .entry.selected .commit-tag { opacity: 1; }
+  .commit-tag-label { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-4); user-select: none; }
+  .commit-tag-input { background: none; border: none; border-bottom: 1px solid transparent; font-family: var(--mono); font-size: 11px; color: var(--commit); outline: none; padding: 0 2px; transition: border-color 100ms, color 100ms; min-width: 3ch; }
+  .commit-tag-input:hover { border-bottom-color: var(--line-strong); }
+  .commit-tag-input:focus { border-bottom-color: var(--commit); color: var(--ink); }
+  .commit-tag-input.overdue { color: var(--accent); }
+  .entry.commitment.done .commit-tag,
+  .entry.commitment.cancelled .commit-tag { opacity: 0.35 !important; }
   .entry.selected { background: var(--surface) !important; }
   .entry.selected .actions { opacity: 1; }
   .entry.priority .glyph { color: var(--accent); }
@@ -454,6 +451,46 @@ function prettyDateFull(iso) { const [y,m,d]=iso.split('-').map(Number); return 
 function prettyMonth(iso) { const [y,m]=iso.split('-').map(Number); return new Date(y,m-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}); }
 function shiftDay(iso, d) { const [y,m,da]=iso.split('-').map(Number); const x=new Date(y,m-1,da); x.setDate(x.getDate()+d); return `${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())}`; }
 function shiftMonth(iso, n) { const [y,m]=iso.split('-').map(Number); const x=new Date(y,m-1,1); x.setMonth(x.getMonth()+n); return `${x.getFullYear()}-${pad(x.getMonth()+1)}`; }
+function isoFromDate(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
+function parseNaturalDate(input) {
+  const s = input.trim().toLowerCase();
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  const today = new Date(); today.setHours(0,0,0,0);
+  if (s === 'today') return isoFromDate(today);
+  if (s === 'tomorrow' || s === 'tmrw' || s === 'tom') { const d=new Date(today); d.setDate(d.getDate()+1); return isoFromDate(d); }
+  if (s === 'yesterday') { const d=new Date(today); d.setDate(d.getDate()-1); return isoFromDate(d); }
+  if (s === 'next week') { const d=new Date(today); d.setDate(d.getDate()+(8-d.getDay())%7||7); return isoFromDate(d); }
+  if (s === 'eom' || s === 'end of month') { return isoFromDate(new Date(today.getFullYear(), today.getMonth()+1, 0)); }
+  const dm = s.match(/^(\d+)\s*d(?:ays?)?$/); if (dm) { const d=new Date(today); d.setDate(d.getDate()+parseInt(dm[1])); return isoFromDate(d); }
+  const wm = s.match(/^(\d+)\s*w(?:eeks?)?$/); if (wm) { const d=new Date(today); d.setDate(d.getDate()+parseInt(wm[1])*7); return isoFromDate(d); }
+  const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+  const shortDays = ['sun','mon','tue','wed','thu','fri','sat'];
+  const isNext = s.startsWith('next ');
+  const sClean = isNext ? s.slice(5) : s;
+  let dayIdx = dayNames.indexOf(sClean);
+  if (dayIdx === -1) dayIdx = shortDays.indexOf(sClean.slice(0,3));
+  if (dayIdx !== -1) {
+    const d = new Date(today);
+    let diff = (dayIdx - d.getDay() + 7) % 7;
+    if (diff === 0 || isNext) diff += 7;
+    d.setDate(d.getDate() + diff);
+    return isoFromDate(d);
+  }
+  return '';
+}
+function formatDueDisplay(iso) {
+  if (!iso) return '';
+  const [y,m,d] = iso.split('-').map(Number);
+  const date = new Date(y, m-1, d);
+  const today = new Date(); today.setHours(0,0,0,0);
+  const diff = Math.round((date - today) / 86400000);
+  if (diff === 0) return 'today';
+  if (diff === 1) return 'tomorrow';
+  if (diff === -1) return 'yesterday';
+  if (diff > 1 && diff <= 6) return date.toLocaleDateString('en-US', { weekday: 'short' });
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
 
 /* ---------- entry model ---------- */
 function renderInlineMarkdown(text) {
@@ -749,9 +786,9 @@ function renderEntryList(ul, entries, opts = {}) {
     };
     li.appendChild(glyph);
 
-    // text column — for commitments wrap in a div so meta sits below
-    const textWrap = entry.type === 'commitment' ? document.createElement('div') : null;
-    if (textWrap) { textWrap.style.cssText = 'display:flex;flex-direction:column;min-width:0;'; li.appendChild(textWrap); }
+    // text column — for commitments wrap in a flex row so tags sit inline
+    const commitLine = entry.type === 'commitment' ? document.createElement('div') : null;
+    if (commitLine) { commitLine.className = 'commit-line'; li.appendChild(commitLine); }
 
     const text = document.createElement('span');
     text.className = 'text'; text.contentEditable = 'true'; text.spellcheck = false;
@@ -776,48 +813,72 @@ function renderEntryList(ul, entries, opts = {}) {
         else window.open(url, '_blank');
       }
     });
-    if (textWrap) textWrap.appendChild(text); else li.appendChild(text);
+    if (commitLine) commitLine.appendChild(text); else li.appendChild(text);
 
     if (entry.type === 'commitment') {
-      const meta = document.createElement('div'); meta.className = 'commit-meta';
-
-      // "To" field
-      const toField = document.createElement('div'); toField.className = 'commit-meta-field';
-      const toLabel = document.createElement('span'); toLabel.className = 'commit-meta-label'; toLabel.textContent = 'To';
-      const toInput = document.createElement('input'); toInput.className = 'commit-meta-input';
+      // Inline "→ who" tag
+      const toTag = document.createElement('span'); toTag.className = 'commit-tag';
+      if (entry.to) toTag.classList.add('has-value');
+      const toLabel = document.createElement('span'); toLabel.className = 'commit-tag-label'; toLabel.textContent = '→';
+      const toInput = document.createElement('input'); toInput.className = 'commit-tag-input';
       toInput.type = 'text'; toInput.placeholder = 'who?'; toInput.autocomplete = 'off';
       toInput.value = entry.to || '';
-      if (!entry.to) toInput.classList.add('empty');
-      toInput.addEventListener('focus', () => toInput.classList.remove('empty'));
+      toInput.style.width = Math.max(entry.to ? entry.to.length : 0, 3) + 2 + 'ch';
+      toInput.addEventListener('focus', () => { toInput.style.width = Math.max(toInput.value.length, 3) + 2 + 'ch'; });
+      toInput.addEventListener('input', () => { toInput.style.width = Math.max(toInput.value.length, 3) + 2 + 'ch'; });
       toInput.addEventListener('blur', () => {
         entry.to = toInput.value.trim();
-        if (!entry.to) toInput.classList.add('empty');
+        toTag.classList.toggle('has-value', !!entry.to);
+        toInput.style.width = Math.max(entry.to ? entry.to.length : 0, 3) + 2 + 'ch';
         commit();
       });
-      toInput.addEventListener('keydown', e => { if (e.key === 'Enter') toInput.blur(); });
-      // auto-size to content
-      toInput.style.width = ((entry.to || '').length || 4) + 3 + 'ch';
-      toInput.addEventListener('input', () => { toInput.style.width = (toInput.value.length || 4) + 3 + 'ch'; });
-      toField.appendChild(toLabel); toField.appendChild(toInput);
+      toInput.addEventListener('keydown', e => { if (e.key === 'Enter') toInput.blur(); if (e.key === 'Escape') { toInput.value = entry.to || ''; toInput.blur(); } });
+      toTag.appendChild(toLabel); toTag.appendChild(toInput);
+      commitLine.appendChild(toTag);
 
-      // "Due" field
-      const dueField = document.createElement('div'); dueField.className = 'commit-meta-field';
-      const dueLabel = document.createElement('span'); dueLabel.className = 'commit-meta-label'; dueLabel.textContent = 'Due';
-      const dueInput = document.createElement('input'); dueInput.className = 'commit-meta-input';
-      dueInput.type = 'date'; dueInput.autocomplete = 'off';
-      dueInput.value = entry.due || '';
-      if (!entry.due) dueInput.classList.add('empty');
-      dueInput.style.width = '118px';
-      dueInput.addEventListener('focus', () => dueInput.classList.remove('empty'));
+      // Inline "due·date" tag
+      const dueTag = document.createElement('span'); dueTag.className = 'commit-tag';
+      if (entry.due) dueTag.classList.add('has-value');
+      const dueLabel = document.createElement('span'); dueLabel.className = 'commit-tag-label'; dueLabel.textContent = 'due';
+      const dueInput = document.createElement('input'); dueInput.className = 'commit-tag-input';
+      dueInput.type = 'text'; dueInput.autocomplete = 'off'; dueInput.spellcheck = false;
+      dueInput.placeholder = 'when?';
+      // display mode: human-readable
+      const updateDueDisplay = () => {
+        const display = formatDueDisplay(entry.due);
+        dueInput.value = display;
+        dueInput.style.width = Math.max(display.length, 4) + 1 + 'ch';
+        const today = new Date(); today.setHours(0,0,0,0);
+        if (entry.due) {
+          const [y,m,d] = entry.due.split('-').map(Number);
+          const diff = Math.round((new Date(y,m-1,d) - today) / 86400000);
+          dueInput.classList.toggle('overdue', diff < 0);
+        } else {
+          dueInput.classList.remove('overdue');
+          dueInput.style.width = '5ch';
+        }
+      };
+      updateDueDisplay();
+      dueInput.addEventListener('focus', () => {
+        // switch to natural-language editing
+        dueInput.value = entry.due || '';
+        dueInput.style.width = '10ch';
+        dueInput.select();
+      });
+      dueInput.addEventListener('input', () => { dueInput.style.width = Math.max(dueInput.value.length, 4) + 1 + 'ch'; });
       dueInput.addEventListener('blur', () => {
-        entry.due = dueInput.value || '';
-        if (!entry.due) dueInput.classList.add('empty');
+        const parsed = parseNaturalDate(dueInput.value);
+        entry.due = parsed || (dueInput.value.trim() === '' ? '' : entry.due);
+        dueTag.classList.toggle('has-value', !!entry.due);
+        updateDueDisplay();
         commit();
       });
-      dueField.appendChild(dueLabel); dueField.appendChild(dueInput);
-
-      meta.appendChild(toField); meta.appendChild(dueField);
-      textWrap.appendChild(meta);
+      dueInput.addEventListener('keydown', e => {
+        if (e.key === 'Enter') { e.preventDefault(); dueInput.blur(); }
+        if (e.key === 'Escape') { dueInput.value = entry.due || ''; dueInput.blur(); }
+      });
+      dueTag.appendChild(dueLabel); dueTag.appendChild(dueInput);
+      commitLine.appendChild(dueTag);
     }
     const actions = document.createElement('span'); actions.className = 'actions';
     if ((entry.type === 'task' || entry.type === 'priority' || entry.type === 'commitment') && !['done','cancelled','migrated','scheduled'].includes(entry.status)) {
