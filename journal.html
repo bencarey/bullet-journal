@@ -65,6 +65,10 @@
   .entry.task .glyph:hover { color: var(--accent); }
   .entry .text { font-size: 14px; color: var(--ink); outline: none; word-break: break-word; padding: 1px 2px; margin: -1px -2px; }
   .entry .text:focus { background: var(--accent-soft); }
+  .entry.note .num { display: none; }
+  .entry.note { grid-template-columns: 20px 1fr auto; }
+  .entry.note .text { color: var(--ink-2); font-style: italic; }
+  .entry.note .glyph { color: var(--ink-3); }
   .entry.done .text { color: var(--done); text-decoration: line-through; text-decoration-thickness: 1px; }
   .entry.cancelled .text { color: var(--ink-4); text-decoration: line-through; }
   .entry.migrated .text { color: var(--ink-4); }
