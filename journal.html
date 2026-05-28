@@ -11,6 +11,7 @@
     --ink: #111111; --ink-2: #444; --ink-3: #888; --ink-4: #c8c8c8;
     --line: #e8e8e8; --line-strong: #1a1a1a;
     --accent: #d65427; --accent-soft: #fbeae2; --done: #b0b0b0;
+    --commit: #4a6fa5; --commit-soft: #edf1f8;
     --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   }
@@ -76,6 +77,11 @@
   .entry[draggable="true"] .num { cursor: grab; }
   .entry.priority:not(.migrated) { background: #fdf5f0; }
   .entry.priority:not(.migrated):hover { background: #fbeae2; }
+  .entry.commitment:not(.done):not(.cancelled):not(.migrated) { background: var(--commit-soft); }
+  .entry.commitment:not(.done):not(.cancelled):not(.migrated):hover { background: #dde6f4; }
+  .entry.commitment .glyph { color: var(--commit); }
+  .entry.commitment.done .glyph, .entry.commitment.cancelled .glyph, .entry.commitment.migrated .glyph { color: var(--ink-4); }
+  .entry.commitment.done .text, .entry.commitment.cancelled .text, .entry.commitment.migrated .text { color: var(--done); }
   .entry.selected { background: var(--surface) !important; }
   .entry.selected .actions { opacity: 1; }
   .entry.priority .glyph { color: var(--accent); }
@@ -237,6 +243,7 @@
         <option value="event">Event ○</option>
         <option value="note">Note —</option>
         <option value="priority">Priority ★</option>
+        <option value="commitment">Commitment ◆</option>
         <option value="inspiration">Idea !</option>
       </select>
       <input type="text" id="dailyInput" placeholder="Add an entry" autocomplete="off">
@@ -273,6 +280,7 @@
             <option value="event">Event ○</option>
             <option value="note">Note —</option>
             <option value="priority">Priority ★</option>
+        <option value="commitment">Commitment ◆</option>
           </select>
           <input type="text" id="monthlyInput" placeholder="Add to month" autocomplete="off">
           <button class="add" id="monthlyAdd">Add</button>
@@ -303,6 +311,7 @@
         <option value="note">Note —</option>
         <option value="event">Event ○</option>
         <option value="priority">Priority ★</option>
+        <option value="commitment">Commitment ◆</option>
       </select>
       <input type="text" id="collectionInput" placeholder="Add to collection" autocomplete="off">
       <button class="add" id="collectionAdd">Add</button>
@@ -358,6 +367,7 @@
       <div class="key-row"><span class="g">—</span><span>Note</span></div>
       <div class="key-row"><span class="g">★</span><span>Priority</span></div>
       <div class="key-row"><span class="g">!</span><span>Idea</span></div>
+      <div class="key-row"><span class="g" style="color:var(--commit)">◆</span><span>Commitment</span></div>
     </div>
 
     <div class="view-label" style="margin-bottom:10px;margin-top:28px">Inline formatting</div>
@@ -448,6 +458,12 @@ function glyphFor(e) {
     if (e.status === 'scheduled') return '<';
     return '·';
   }
+  if (e.type === 'commitment') {
+    if (e.status === 'done') return '×';
+    if (e.status === 'cancelled') return '~';
+    if (e.status === 'migrated') return '>';
+    return '◆';
+  }
   if (e.type === 'event') return '○';
   if (e.type === 'note') return '—';
   if (e.type === 'priority') {
@@ -460,14 +476,14 @@ function glyphFor(e) {
   return '·';
 }
 function cycleStatus(e) {
-  if (e.type !== 'task' && e.type !== 'priority') return;
+  if (e.type !== 'task' && e.type !== 'priority' && e.type !== 'commitment') return;
   const order = ['open','done','cancelled','open'];
   e.status = order[order.indexOf(e.status || 'open') + 1];
 }
 function newEntry(type, text, status) {
   return { id: Date.now()+Math.random().toString(36).slice(2,7),
     type, text: (text||'').trim(),
-    status: type === 'task' ? (status || 'open') : null };
+    status: (type === 'task' || type === 'commitment') ? (status || 'open') : null };
 }
 
 /* ---------- markdown parse / serialize ---------- */
@@ -512,12 +528,15 @@ function parseMarkdown(md) {
       else if (m === '<') status = 'scheduled';
       if (t[2].startsWith('★')) {
         const pe = newEntry('priority', t[2].replace(/^★\s*/, '')); pe.status = status; target.push(pe);
+      } else if (t[2].startsWith('◆')) {
+        const ce = newEntry('commitment', t[2].replace(/^◆\s*/, '')); ce.status = status; target.push(ce);
       } else { target.push(newEntry('task', t[2], status)); }
       continue;
     }
     if (c.startsWith('○')) { target.push(newEntry('event', c.replace(/^○\s*/,''))); continue; }
     if (c.startsWith('—') || c.startsWith('–')) { target.push(newEntry('note', c.replace(/^[—–]\s*/,''))); continue; }
     if (c.startsWith('★')) { target.push(newEntry('priority', c.replace(/^★\s*/,''))); continue; }
+    if (c.startsWith('◆')) { target.push(newEntry('commitment', c.replace(/^◆\s*/,''))); continue; }
     if (c.startsWith('!')) { target.push(newEntry('inspiration', c.replace(/^!\s*/,''))); continue; }
     target.push(newEntry('note', c));
   }
@@ -558,6 +577,12 @@ function fmt(e) {
     else if (e.status === 'cancelled') m = '~';
     else if (e.status === 'scheduled') m = '<';
     return `- [${m}] ${e.text}`;
+  }
+  if (e.type === 'commitment') {
+    if (e.status === 'done') return `- [x] ◆ ${e.text}`;
+    if (e.status === 'cancelled') return `- [~] ◆ ${e.text}`;
+    if (e.status === 'migrated') return `- [>] ◆ ${e.text}`;
+    return `- ◆ ${e.text}`;
   }
   if (e.type === 'event') return `- ○ ${e.text}`;
   if (e.type === 'note') return `- — ${e.text}`;
@@ -685,7 +710,7 @@ function renderEntryList(ul, entries, opts = {}) {
     const glyph = document.createElement('span');
     glyph.className = 'glyph'; glyph.textContent = glyphFor(entry);
     glyph.onclick = (evt) => {
-      if (entry.type === 'task' || entry.type === 'priority') {
+      if (entry.type === 'task' || entry.type === 'priority' || entry.type === 'commitment') {
         cycleStatus(entry);
         if (entry.status === 'done') launchConfetti(evt.clientX, evt.clientY);
         commit(); renderAll();
@@ -717,7 +742,7 @@ function renderEntryList(ul, entries, opts = {}) {
     });
     li.appendChild(text);
     const actions = document.createElement('span'); actions.className = 'actions';
-    if ((entry.type === 'task' || entry.type === 'priority') && !['done','cancelled','migrated','scheduled'].includes(entry.status)) {
+    if ((entry.type === 'task' || entry.type === 'priority' || entry.type === 'commitment') && !['done','cancelled','migrated','scheduled'].includes(entry.status)) {
       const schedBtn = document.createElement('button'); schedBtn.textContent = 'Schedule';
       schedBtn.onclick = e => {
         e.stopPropagation();
@@ -745,23 +770,31 @@ function renderEntryList(ul, entries, opts = {}) {
       };
       actions.appendChild(schedBtn);
     }
-    if ((entry.type === 'task' || entry.type === 'priority') && entry.status !== 'done' && entry.status !== 'cancelled' && opts.onMigrate) {
+    if ((entry.type === 'task' || entry.type === 'priority' || entry.type === 'commitment') && entry.status !== 'done' && entry.status !== 'cancelled' && opts.onMigrate) {
       const m = document.createElement('button'); m.textContent = 'Migrate';
       m.onclick = () => opts.onMigrate(entry, idx);
       actions.appendChild(m);
     }
     if (entry.type === 'task' && !['done','cancelled','migrated'].includes(entry.status)) {
       const pri = document.createElement('button'); pri.textContent = '★';
-      pri.title = 'Promote to priority';
-      pri.onclick = () => { entry.type = 'priority'; commit(); renderAll(); };
+      pri.title = 'Mark as priority'; pri.onclick = () => { entry.type = 'priority'; commit(); renderAll(); };
       actions.appendChild(pri);
+      const com = document.createElement('button'); com.textContent = '◆';
+      com.title = 'Mark as commitment'; com.style.color = 'var(--commit)';
+      com.onclick = () => { entry.type = 'commitment'; commit(); renderAll(); };
+      actions.appendChild(com);
     }
     if (entry.type === 'priority' && !['done','cancelled','migrated'].includes(entry.status)) {
       const unp = document.createElement('button'); unp.textContent = '★';
-      unp.title = 'Demote to task';
-      unp.style.textDecoration = 'line-through';
+      unp.title = 'Demote to task'; unp.style.textDecoration = 'line-through';
       unp.onclick = () => { entry.type = 'task'; commit(); renderAll(); };
       actions.appendChild(unp);
+    }
+    if (entry.type === 'commitment' && !['done','cancelled','migrated'].includes(entry.status)) {
+      const uncom = document.createElement('button'); uncom.textContent = '◆';
+      uncom.title = 'Demote to task'; uncom.style.textDecoration = 'line-through'; uncom.style.color = 'var(--commit)';
+      uncom.onclick = () => { entry.type = 'task'; commit(); renderAll(); };
+      actions.appendChild(uncom);
     }
     const del = document.createElement('button'); del.textContent = 'Delete';
     del.onclick = () => { launchBurn(li, () => { entries.splice(idx, 1); commit(); renderAll(); }); };
@@ -827,7 +860,7 @@ function renderDailySummary(entries) {
   const priority = entries.filter(e => e.type === 'priority' && e.status !== 'migrated').length;
   const open     = entries.filter(e => e.type === 'task' && (!e.status || e.status === 'open')).length;
   const done     = entries.filter(e => e.type === 'task' && e.status === 'done').length;
-  const migrated = entries.filter(e => (e.type === 'task' || e.type === 'priority') && e.status === 'migrated').length;
+  const migrated = entries.filter(e => (e.type === 'task' || e.type === 'priority' || e.type === 'commitment') && e.status === 'migrated').length;
   const cancelled= entries.filter(e => e.type === 'task' && e.status === 'cancelled').length;
   const parts = [];
   if (priority)  parts.push(`<span style="color:var(--accent)">${priority} ${priority === 1 ? 'priority' : 'priorities'}</span>`);
@@ -866,7 +899,7 @@ function renderMigrateBanner() {
   let openCount = 0, oldest = null;
   for (const [d, entries] of Object.entries(state.daily)) {
     if (d >= today) continue;
-    const opens = entries.filter(e => (e.type === 'task' || e.type === 'priority') && (!e.status || e.status === 'open'));
+    const opens = entries.filter(e => (e.type === 'task' || e.type === 'priority' || e.type === 'commitment') && (!e.status || e.status === 'open'));
     if (opens.length) { openCount += opens.length; if (!oldest || d < oldest) oldest = d; }
   }
   if (!openCount) return;
@@ -877,7 +910,7 @@ function renderMigrateBanner() {
     for (const [d, entries] of Object.entries(state.daily)) {
       if (d >= today) continue;
       entries.forEach(e => {
-        if ((e.type === 'task' || e.type === 'priority') && (!e.status || e.status === 'open')) {
+        if ((e.type === 'task' || e.type === 'priority' || e.type === 'commitment') && (!e.status || e.status === 'open')) {
           e.status = 'migrated';
           state.daily[today] = state.daily[today] || [];
           state.daily[today].push(newEntry(e.type, e.text));
@@ -962,7 +995,8 @@ function renderFuture() {
       }
     });
     const composer = document.createElement('div'); composer.className = 'composer';
-    composer.innerHTML = `<select><option value="event">Event ○</option><option value="task">Task ·</option><option value="note">Note —</option><option value="priority">Priority ★</option></select><input type="text" placeholder="Add" autocomplete="off"><button class="add">+</button>`;
+    composer.innerHTML = `<select><option value="event">Event ○</option><option value="task">Task ·</option><option value="note">Note —</option><option value="priority">Priority ★</option>
+        <option value="commitment">Commitment ◆</option></select><input type="text" placeholder="Add" autocomplete="off"><button class="add">+</button>`;
     const sel = composer.querySelector('select');
     const inp = composer.querySelector('input');
     const btn = composer.querySelector('button');
