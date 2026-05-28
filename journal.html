@@ -79,9 +79,24 @@
   .entry.priority:not(.migrated):hover { background: #fbeae2; }
   .entry.commitment:not(.done):not(.cancelled):not(.migrated) { background: var(--commit-soft); }
   .entry.commitment:not(.done):not(.cancelled):not(.migrated):hover { background: #dde6f4; }
+  .entry.commitment { align-items: start; }
+  .entry.commitment .glyph { padding-top: 3px; }
+  .entry.commitment .num { padding-top: 3px; }
+  .entry.commitment .actions { padding-top: 2px; }
   .entry.commitment .glyph { color: var(--commit); }
   .entry.commitment.done .glyph, .entry.commitment.cancelled .glyph, .entry.commitment.migrated .glyph { color: var(--ink-4); }
   .entry.commitment.done .text, .entry.commitment.cancelled .text, .entry.commitment.migrated .text { color: var(--done); }
+  .commit-meta { display: flex; gap: 16px; margin-top: 5px; flex-wrap: wrap; }
+  .commit-meta-field { display: flex; align-items: center; gap: 4px; }
+  .commit-meta-label { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-4); user-select: none; }
+  .commit-meta-input { background: none; border: none; border-bottom: 1px solid transparent; font: inherit; font-size: 12px; color: var(--ink-3); outline: none; padding: 1px 2px; min-width: 60px; width: auto; transition: border-color 100ms, color 100ms; }
+  .commit-meta-input:hover { border-bottom-color: var(--line-strong); color: var(--ink-2); }
+  .commit-meta-input:focus { border-bottom-color: var(--commit); color: var(--ink); }
+  .commit-meta-input.empty { color: var(--ink-4); font-style: italic; }
+  .entry.commitment.done .commit-meta-label,
+  .entry.commitment.done .commit-meta-input,
+  .entry.commitment.cancelled .commit-meta-label,
+  .entry.commitment.cancelled .commit-meta-input { opacity: 0.4; }
   .entry.selected { background: var(--surface) !important; }
   .entry.selected .actions { opacity: 1; }
   .entry.priority .glyph { color: var(--accent); }
@@ -480,10 +495,19 @@ function cycleStatus(e) {
   const order = ['open','done','cancelled','open'];
   e.status = order[order.indexOf(e.status || 'open') + 1];
 }
-function newEntry(type, text, status) {
+function newEntry(type, text, status, extra = {}) {
   return { id: Date.now()+Math.random().toString(36).slice(2,7),
     type, text: (text||'').trim(),
-    status: (type === 'task' || type === 'commitment') ? (status || 'open') : null };
+    status: (type === 'task' || type === 'commitment') ? (status || 'open') : null,
+    ...(type === 'commitment' ? { to: extra.to || '', due: extra.due || '' } : {}) };
+}
+function parseCommitmentText(raw) {
+  // extract trailing @person and due:YYYY-MM-DD tokens
+  let text = raw.trim();
+  let to = '', due = '';
+  text = text.replace(/\s+due:(\d{4}-\d{2}-\d{2})/i, (_, d) => { due = d; return ''; });
+  text = text.replace(/\s+@(\S+)$/, (_, p) => { to = p; return ''; });
+  return { text: text.trim(), to, due };
 }
 
 /* ---------- markdown parse / serialize ---------- */
@@ -529,14 +553,15 @@ function parseMarkdown(md) {
       if (t[2].startsWith('★')) {
         const pe = newEntry('priority', t[2].replace(/^★\s*/, '')); pe.status = status; target.push(pe);
       } else if (t[2].startsWith('◆')) {
-        const ce = newEntry('commitment', t[2].replace(/^◆\s*/, '')); ce.status = status; target.push(ce);
+        const p = parseCommitmentText(t[2].replace(/^◆\s*/, ''));
+        const ce = newEntry('commitment', p.text, status, { to: p.to, due: p.due }); target.push(ce);
       } else { target.push(newEntry('task', t[2], status)); }
       continue;
     }
     if (c.startsWith('○')) { target.push(newEntry('event', c.replace(/^○\s*/,''))); continue; }
     if (c.startsWith('—') || c.startsWith('–')) { target.push(newEntry('note', c.replace(/^[—–]\s*/,''))); continue; }
     if (c.startsWith('★')) { target.push(newEntry('priority', c.replace(/^★\s*/,''))); continue; }
-    if (c.startsWith('◆')) { target.push(newEntry('commitment', c.replace(/^◆\s*/,''))); continue; }
+    if (c.startsWith('◆')) { const p = parseCommitmentText(c.replace(/^◆\s*/,'')); target.push(newEntry('commitment', p.text, 'open', { to: p.to, due: p.due })); continue; }
     if (c.startsWith('!')) { target.push(newEntry('inspiration', c.replace(/^!\s*/,''))); continue; }
     target.push(newEntry('note', c));
   }
@@ -579,10 +604,12 @@ function fmt(e) {
     return `- [${m}] ${e.text}`;
   }
   if (e.type === 'commitment') {
-    if (e.status === 'done') return `- [x] ◆ ${e.text}`;
-    if (e.status === 'cancelled') return `- [~] ◆ ${e.text}`;
-    if (e.status === 'migrated') return `- [>] ◆ ${e.text}`;
-    return `- ◆ ${e.text}`;
+    const meta = [e.to ? `@${e.to}` : '', e.due ? `due:${e.due}` : ''].filter(Boolean).join(' ');
+    const body = meta ? `${e.text}  ${meta}` : e.text;
+    if (e.status === 'done') return `- [x] ◆ ${body}`;
+    if (e.status === 'cancelled') return `- [~] ◆ ${body}`;
+    if (e.status === 'migrated') return `- [>] ◆ ${body}`;
+    return `- ◆ ${body}`;
   }
   if (e.type === 'event') return `- ○ ${e.text}`;
   if (e.type === 'note') return `- — ${e.text}`;
@@ -717,6 +744,11 @@ function renderEntryList(ul, entries, opts = {}) {
       }
     };
     li.appendChild(glyph);
+
+    // text column — for commitments wrap in a div so meta sits below
+    const textWrap = entry.type === 'commitment' ? document.createElement('div') : null;
+    if (textWrap) { textWrap.style.cssText = 'display:flex;flex-direction:column;min-width:0;'; li.appendChild(textWrap); }
+
     const text = document.createElement('span');
     text.className = 'text'; text.contentEditable = 'true'; text.spellcheck = false;
     text.innerHTML = renderInlineMarkdown(entry.text);
@@ -740,7 +772,49 @@ function renderEntryList(ul, entries, opts = {}) {
         else window.open(url, '_blank');
       }
     });
-    li.appendChild(text);
+    if (textWrap) textWrap.appendChild(text); else li.appendChild(text);
+
+    if (entry.type === 'commitment') {
+      const meta = document.createElement('div'); meta.className = 'commit-meta';
+
+      // "To" field
+      const toField = document.createElement('div'); toField.className = 'commit-meta-field';
+      const toLabel = document.createElement('span'); toLabel.className = 'commit-meta-label'; toLabel.textContent = 'To';
+      const toInput = document.createElement('input'); toInput.className = 'commit-meta-input';
+      toInput.type = 'text'; toInput.placeholder = 'who?'; toInput.autocomplete = 'off';
+      toInput.value = entry.to || '';
+      if (!entry.to) toInput.classList.add('empty');
+      toInput.addEventListener('focus', () => toInput.classList.remove('empty'));
+      toInput.addEventListener('blur', () => {
+        entry.to = toInput.value.trim();
+        if (!entry.to) toInput.classList.add('empty');
+        commit();
+      });
+      toInput.addEventListener('keydown', e => { if (e.key === 'Enter') toInput.blur(); });
+      // auto-size to content
+      toInput.style.width = ((entry.to || '').length || 4) + 3 + 'ch';
+      toInput.addEventListener('input', () => { toInput.style.width = (toInput.value.length || 4) + 3 + 'ch'; });
+      toField.appendChild(toLabel); toField.appendChild(toInput);
+
+      // "Due" field
+      const dueField = document.createElement('div'); dueField.className = 'commit-meta-field';
+      const dueLabel = document.createElement('span'); dueLabel.className = 'commit-meta-label'; dueLabel.textContent = 'Due';
+      const dueInput = document.createElement('input'); dueInput.className = 'commit-meta-input';
+      dueInput.type = 'date'; dueInput.autocomplete = 'off';
+      dueInput.value = entry.due || '';
+      if (!entry.due) dueInput.classList.add('empty');
+      dueInput.style.width = '118px';
+      dueInput.addEventListener('focus', () => dueInput.classList.remove('empty'));
+      dueInput.addEventListener('blur', () => {
+        entry.due = dueInput.value || '';
+        if (!entry.due) dueInput.classList.add('empty');
+        commit();
+      });
+      dueField.appendChild(dueLabel); dueField.appendChild(dueInput);
+
+      meta.appendChild(toField); meta.appendChild(dueField);
+      textWrap.appendChild(meta);
+    }
     const actions = document.createElement('span'); actions.className = 'actions';
     if ((entry.type === 'task' || entry.type === 'priority' || entry.type === 'commitment') && !['done','cancelled','migrated','scheduled'].includes(entry.status)) {
       const schedBtn = document.createElement('button'); schedBtn.textContent = 'Schedule';
