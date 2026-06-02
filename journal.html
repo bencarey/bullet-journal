@@ -199,6 +199,7 @@
   .entry .text a { color: var(--accent); text-decoration: underline; text-decoration-thickness: 1px; cursor: pointer; }
   .entry .text strong { font-weight: 600; }
   .entry .text em { font-style: italic; }
+  .tag-pill { display: inline-block; font-size: 10px; font-weight: 500; letter-spacing: 0.03em; padding: 1px 6px 2px; border-radius: 3px; margin: 0 1px; vertical-align: middle; cursor: default; user-select: none; line-height: 1.4; }
 
   .loading-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); z-index: 1000; font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
   .loading-overlay.hidden { display: none; }
@@ -391,6 +392,7 @@
       <div class="key-row"><span class="g" style="font-size:11px;font-family:var(--mono)">**text**</span><span><strong>Bold</strong></span></div>
       <div class="key-row"><span class="g" style="font-size:11px;font-family:var(--mono)">*text*</span><span><em>Italic</em></span></div>
       <div class="key-row" style="grid-column:span 2"><span class="g" style="font-size:11px;font-family:var(--mono);white-space:nowrap">[label](url)</span><span>Link — e.g. <code style="font-size:11px">[Google](https://google.com)</code></span></div>
+      <div class="key-row" style="grid-column:span 2"><span class="g" style="font-size:11px;font-family:var(--mono)">#tag</span><span>Tag — e.g. <span id="keyTagExample"></span> — each unique tag gets a consistent color</span></div>
     </div>
 
     <div class="view-label" style="margin-bottom:10px;margin-top:28px">Commitment fields</div>
@@ -503,6 +505,23 @@ function formatDueDisplay(iso) {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+/* ---------- tag colors ---------- */
+const TAG_PALETTE = [
+  { bg: '#e3f0e3', fg: '#2a5e2a' },  // green
+  { bg: '#e3eaf8', fg: '#2a4480' },  // blue
+  { bg: '#f8e3f0', fg: '#80284e' },  // pink
+  { bg: '#fdeee3', fg: '#7a4420' },  // orange
+  { bg: '#ede3f8', fg: '#52288a' },  // purple
+  { bg: '#e3f5f5', fg: '#1e6060' },  // teal
+  { bg: '#f5f5e3', fg: '#5a5a20' },  // olive
+  { bg: '#f8e8e3', fg: '#7a2a20' },  // red/rust
+];
+function tagColor(tag) {
+  let h = 0;
+  for (let i = 0; i < tag.length; i++) h = (Math.imul(31, h) + tag.charCodeAt(i)) | 0;
+  return TAG_PALETTE[Math.abs(h) % TAG_PALETTE.length];
+}
+
 /* ---------- entry model ---------- */
 function renderInlineMarkdown(text) {
   let s = text
@@ -514,6 +533,11 @@ function renderInlineMarkdown(text) {
   // link [label](url)
   s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,
     '<a data-href="$2">$1</a>');
+  // #tags
+  s = s.replace(/#([a-zA-Z][a-zA-Z0-9_-]*)/g, (_, tag) => {
+    const c = tagColor(tag);
+    return `<span class="tag-pill" style="background:${c.bg};color:${c.fg}">#${tag}</span>`;
+  });
   return s;
 }
 
@@ -993,6 +1017,11 @@ function renderHeader() {
   document.getElementById('journalTitle').textContent = state.title;
   document.getElementById('todayStamp').textContent =
     new Date().toLocaleDateString('en-US', { day: '2-digit', month: 'short', year: 'numeric' }).toUpperCase();
+  // seed the key tab tag example with live pills
+  const ex = document.getElementById('keyTagExample');
+  if (ex) ex.innerHTML = ['personal','work','health'].map(t => {
+    const c = tagColor(t); return `<span class="tag-pill" style="background:${c.bg};color:${c.fg}">#${t}</span>`;
+  }).join(' ');
 }
 
 function setView(view) {
