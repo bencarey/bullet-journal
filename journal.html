@@ -133,19 +133,6 @@
   .calendar .cell.today .dot { background: white; }
   .panel-label { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 12px; }
 
-  .future-grid { display: grid; grid-template-columns: repeat(2, 1fr); border-top: 1px solid var(--line); border-left: 1px solid var(--line); }
-  @media (max-width: 720px) { .future-grid { grid-template-columns: 1fr; } }
-  .future-month { border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); padding: 18px; background: var(--surface); min-height: 170px; }
-  .future-month-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--line); }
-  .future-month-name { font-size: 10px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink); }
-  .future-month-year { font-size: 9px; color: var(--ink-3); font-variant-numeric: tabular-nums; }
-  .future-month .entry { grid-template-columns: 16px 1fr auto; padding: 6px 0; }
-  .future-month .entry .num { display: none; }
-  .future-month .composer { grid-template-columns: 16px 1fr auto; padding-top: 10px; border-top: 1px dashed var(--line); margin-top: 10px; }
-  .future-month .composer .spacer { display: none; }
-  .future-month .composer select { font-size: 10px; height: 26px; }
-  .future-month .composer input { height: 26px; font-size: 13px; }
-  .future-month .composer button.add { padding: 0 9px; height: 26px; }
 
   .collection-tabs { display: flex; align-items: center; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 28px; gap: 0; }
   .collection-tab { display: flex; align-items: center; gap: 5px; padding: 9px 14px 9px; font-size: 11px; font-weight: 500; letter-spacing: 0.1em; text-transform: uppercase; color: var(--ink-3); cursor: pointer; border-bottom: 2px solid transparent; margin-bottom: -1px; transition: color 100ms; white-space: nowrap; }
@@ -170,7 +157,7 @@
   .index-list .count { color: var(--ink-3); font-family: var(--mono); font-size: 10px; font-variant-numeric: tabular-nums; }
 
   .key-block { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); border-top: 1px solid var(--line); border-left: 1px solid var(--line); margin-bottom: 28px; }
-  .key-row { display: grid; grid-template-columns: 28px 1fr; gap: 12px; padding: 11px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); align-items: center; font-size: 12px; }
+  .key-row { display: grid; grid-template-columns: minmax(28px, auto) 1fr; gap: 12px; padding: 11px 14px; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); background: var(--surface); align-items: start; font-size: 12px; }
   .key-row .g { font-family: var(--mono); font-size: 13px; color: var(--accent); text-align: center; }
   .key-desc { color: var(--ink-2); font-size: 13px; line-height: 1.6; max-width: 600px; margin-bottom: 14px; }
 
@@ -232,10 +219,10 @@
   <nav>
     <button class="nav-btn active" data-view="daily">Daily</button>
     <button class="nav-btn" data-view="monthly">Monthly</button>
-    <button class="nav-btn" data-view="future">Future</button>
     <button class="nav-btn" data-view="collections">Collections</button>
     <button class="nav-btn" data-view="index">Index</button>
     <button class="nav-btn" data-view="done">Done</button>
+    <button class="nav-btn" data-view="notes">Notes</button>
     <button class="nav-btn" data-view="key">Key</button>
     <button class="nav-btn" data-view="source">Source</button>
   </nav>
@@ -306,17 +293,6 @@
     </div>
   </section>
 
-  <section class="view" id="view-future">
-    <div class="view-head">
-      <div><div class="view-label">Year</div><div class="view-title" id="yearLabel"></div></div>
-      <div></div>
-      <div class="pager">
-        <button id="prevYear">←</button>
-        <button id="nextYear">→</button>
-      </div>
-    </div>
-    <div class="future-grid" id="futureGrid"></div>
-  </section>
 
   <section class="view" id="view-collections">
     <div id="collectionTabs" class="collection-tabs"></div>
@@ -345,10 +321,18 @@
 
   <section class="view" id="view-done">
     <div class="view-head">
-      <div><div class="view-label">History</div><div class="view-title">Done &amp; Notes</div></div>
+      <div><div class="view-label">History</div><div class="view-title">Done</div></div>
       <div></div><div></div>
     </div>
     <div id="doneContent"></div>
+  </section>
+
+  <section class="view" id="view-notes">
+    <div class="view-head">
+      <div><div class="view-label">Reference</div><div class="view-title">Notes</div></div>
+      <div></div><div></div>
+    </div>
+    <div id="notesContent"></div>
   </section>
 
   <section class="view" id="view-source">
@@ -391,7 +375,7 @@
     <div class="key-block">
       <div class="key-row"><span class="g" style="font-size:11px;font-family:var(--mono)">**text**</span><span><strong>Bold</strong></span></div>
       <div class="key-row"><span class="g" style="font-size:11px;font-family:var(--mono)">*text*</span><span><em>Italic</em></span></div>
-      <div class="key-row" style="grid-column:span 2"><span class="g" style="font-size:11px;font-family:var(--mono);white-space:nowrap">[label](url)</span><span>Link — e.g. <code style="font-size:11px">[Google](https://google.com)</code></span></div>
+      <div class="key-row" style="grid-column:span 2"><span class="g" style="font-size:11px;font-family:var(--mono)">[label](url)</span><span>Link — e.g. <code style="font-size:11px">[Google](https://google.com)</code></span></div>
       <div class="key-row" style="grid-column:span 2"><span class="g" style="font-size:11px;font-family:var(--mono)">#tag</span><span>Tag — e.g. <span id="keyTagExample"></span> — each unique tag gets a consistent color</span></div>
     </div>
 
@@ -1153,44 +1137,6 @@ function renderMonthly() {
   }
 }
 
-function renderFuture() {
-  document.getElementById('yearLabel').textContent = state.activeYear;
-  const grid = document.getElementById('futureGrid'); grid.innerHTML = '';
-  const names = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  for (let m = 1; m <= 12; m++) {
-    const key = `${state.activeYear}-${pad(m)}`;
-    const box = document.createElement('div'); box.className = 'future-month';
-    const head = document.createElement('div'); head.className = 'future-month-head';
-    head.innerHTML = `<span class="future-month-name">${names[m-1]}</span><span class="future-month-year">${state.activeYear}</span>`;
-    box.appendChild(head);
-    const ul = document.createElement('ul'); ul.className = 'entry-list'; box.appendChild(ul);
-    renderEntryList(ul, state.future[key] || [], {
-      emptyMsg: '—', hideNum: true,
-      onMigrate: (entry) => {
-        entry.status = 'migrated';
-        state.monthly[key] = state.monthly[key] || [];
-        state.monthly[key].push(newEntry(entry.type, entry.text));
-        commit(); renderAll();
-      }
-    });
-    const composer = document.createElement('div'); composer.className = 'composer';
-    composer.innerHTML = `<select><option value="event">Event ○</option><option value="task">Task ·</option><option value="note">Note —</option><option value="priority">Priority ★</option>
-        <option value="commitment">Commitment ◆</option></select><input type="text" placeholder="Add" autocomplete="off"><button class="add">+</button>`;
-    const sel = composer.querySelector('select');
-    const inp = composer.querySelector('input');
-    const btn = composer.querySelector('button');
-    const addIt = () => {
-      const v = inp.value.trim(); if (!v) return;
-      state.future[key] = state.future[key] || [];
-      state.future[key].push(newEntry(sel.value, v));
-      inp.value = ''; commit(); renderAll();
-    };
-    btn.onclick = addIt;
-    inp.addEventListener('keydown', e => { if (e.key === 'Enter') addIt(); });
-    box.appendChild(composer);
-    grid.appendChild(box);
-  }
-}
 
 function renderCollections() {
   const names = Object.keys(state.collections);
@@ -1286,11 +1232,13 @@ function renderSource() {
 function renderDone() {
   const root = document.getElementById('doneContent');
   root.innerHTML = '';
+
+  // Collect all done tasks from daily, monthly, and collections
   const items = [];
   const collect = (bucket, periodType) => {
     Object.entries(bucket).forEach(([period, entries]) => {
       (entries || []).forEach(e => {
-        if (e.status === 'done' || e.type === 'note' || e.type === 'inspiration') {
+        if (e.status === 'done') {
           items.push({ ...e, period, periodType });
         }
       });
@@ -1300,48 +1248,169 @@ function renderDone() {
   collect(state.monthly, 'monthly');
   collect(state.collections, 'collection');
 
-  items.sort((a, b) => {
-    const rank = { daily: 0, monthly: 1, collection: 2 };
-    if (rank[a.periodType] !== rank[b.periodType]) return rank[a.periodType] - rank[b.periodType];
-    return b.period.localeCompare(a.period);
+  if (!items.length) {
+    const el = document.createElement('div'); el.className = 'empty';
+    el.textContent = 'No completed tasks yet.'; root.appendChild(el); return;
+  }
+
+  // Derive a sortable month key and display label per item
+  function itemMonthKey(item) {
+    if (item.periodType === 'daily') return item.period.slice(0, 7);
+    if (item.periodType === 'monthly') return item.period;
+    return '0000-00'; // collections: sort last
+  }
+  function itemMonthLabel(mk) {
+    if (mk === '0000-00') return 'Collections';
+    const [y, m] = mk.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+
+  // Group by month
+  const byMonth = {};
+  items.forEach(item => {
+    const mk = itemMonthKey(item);
+    if (!byMonth[mk]) byMonth[mk] = [];
+    byMonth[mk].push(item);
   });
+
+  // Sort months newest first
+  const sortedMonths = Object.keys(byMonth).sort((a, b) => b.localeCompare(a));
+
+  sortedMonths.forEach(mk => {
+    const group = byMonth[mk];
+    // Section header
+    const head = document.createElement('div');
+    head.style.cssText = 'font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ink-3);padding:18px 0 8px;border-bottom:1px solid var(--line);margin-bottom:2px;';
+    head.textContent = itemMonthLabel(mk);
+    root.appendChild(head);
+
+    const ul = document.createElement('ul'); ul.className = 'entry-list';
+    group.forEach(item => {
+      const li = document.createElement('li');
+      li.className = `entry ${item.type} done`;
+      li.style.gridTemplateColumns = '20px 1fr auto';
+
+      const glyph = document.createElement('span'); glyph.className = 'glyph';
+      glyph.textContent = glyphFor(item); li.appendChild(glyph);
+
+      const text = document.createElement('span'); text.className = 'text';
+      text.innerHTML = renderInlineMarkdown(item.text); li.appendChild(text);
+
+      const period = document.createElement('span'); period.className = 'done-period';
+      if (item.periodType === 'daily') {
+        const [y, m, d] = item.period.split('-').map(Number);
+        period.textContent = new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      } else if (item.periodType === 'monthly') {
+        period.textContent = '';
+      } else {
+        period.textContent = item.period;
+      }
+      li.appendChild(period);
+      ul.appendChild(li);
+    });
+    root.appendChild(ul);
+  });
+}
+
+function renderNotes() {
+  const root = document.getElementById('notesContent');
+  root.innerHTML = '';
+
+  // Collect all notes from all buckets
+  const items = [];
+  const collect = (bucket, periodType) => {
+    Object.entries(bucket).forEach(([period, entries]) => {
+      (entries || []).forEach(e => {
+        if (e.type === 'note') {
+          // Extract tags from text
+          const tags = [...new Set((e.text.match(/#([a-zA-Z][a-zA-Z0-9_-]*)/g) || []).map(t => t.slice(1)))];
+          items.push({ ...e, period, periodType, tags });
+        }
+      });
+    });
+  };
+  collect(state.daily, 'daily');
+  collect(state.monthly, 'monthly');
+  collect(state.collections, 'collection');
+  Object.values(state.collections).forEach(() => {}); // already handled above
 
   if (!items.length) {
     const el = document.createElement('div'); el.className = 'empty';
-    el.textContent = 'No completed tasks or notes yet.'; root.appendChild(el); return;
+    el.textContent = 'No notes yet.'; root.appendChild(el); return;
   }
 
-  const ul = document.createElement('ul'); ul.className = 'entry-list';
+  // Build tag → items map; items with no tags go to '__none__'
+  const byTag = {};
   items.forEach(item => {
-    const li = document.createElement('li');
-    li.className = `entry ${item.type}`; li.style.gridTemplateColumns = '20px 1fr auto';
-    if (item.status === 'done') li.classList.add('done');
-
-    const glyph = document.createElement('span'); glyph.className = 'glyph';
-    glyph.textContent = glyphFor(item); li.appendChild(glyph);
-
-    const text = document.createElement('span'); text.className = 'text';
-    text.textContent = item.text; li.appendChild(text);
-
-    const period = document.createElement('span'); period.className = 'done-period';
-    if (item.periodType === 'daily') {
-      const [y,m,d] = item.period.split('-').map(Number);
-      period.textContent = new Date(y,m-1,d).toLocaleDateString('en-US',{month:'short',day:'numeric'});
-    } else if (item.periodType === 'monthly') {
-      const [y,m] = item.period.split('-').map(Number);
-      period.textContent = new Date(y,m-1,1).toLocaleDateString('en-US',{month:'short',year:'numeric'});
-    } else {
-      period.textContent = item.period;
-    }
-    li.appendChild(period);
-    ul.appendChild(li);
+    const tagList = item.tags.length ? item.tags : ['__none__'];
+    tagList.forEach(tag => {
+      if (!byTag[tag]) byTag[tag] = [];
+      byTag[tag].push(item);
+    });
   });
-  root.appendChild(ul);
+
+  // Sort: named tags alphabetically, '__none__' last
+  const sortedTags = Object.keys(byTag).sort((a, b) => {
+    if (a === '__none__') return 1;
+    if (b === '__none__') return -1;
+    return a.localeCompare(b);
+  });
+
+  function itemSortKey(item) {
+    if (item.periodType === 'daily') return item.period;
+    if (item.periodType === 'monthly') return item.period + '-00';
+    return '0000-00-00';
+  }
+
+  function periodLabel(item) {
+    if (item.periodType === 'daily') {
+      const [y, m, d] = item.period.split('-').map(Number);
+      return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    if (item.periodType === 'monthly') {
+      const [y, m] = item.period.split('-').map(Number);
+      return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+    return item.period;
+  }
+
+  sortedTags.forEach(tag => {
+    const tagItems = byTag[tag].slice().sort((a, b) => itemSortKey(b).localeCompare(itemSortKey(a)));
+
+    // Tag header
+    const head = document.createElement('div');
+    head.style.cssText = 'display:flex;align-items:center;gap:10px;padding:18px 0 8px;border-bottom:1px solid var(--line);margin-bottom:2px;';
+    if (tag === '__none__') {
+      head.innerHTML = `<span style="font-size:10px;letter-spacing:0.18em;text-transform:uppercase;color:var(--ink-3)">No tag</span>`;
+    } else {
+      const c = tagColor(tag);
+      head.innerHTML = `<span class="tag-pill" style="background:${c.bg};color:${c.fg};font-size:11px;padding:2px 8px">#${tag}</span><span style="font-size:10px;color:var(--ink-4)">${tagItems.length} note${tagItems.length === 1 ? '' : 's'}</span>`;
+    }
+    root.appendChild(head);
+
+    const ul = document.createElement('ul'); ul.className = 'entry-list';
+    tagItems.forEach(item => {
+      const li = document.createElement('li');
+      li.className = 'entry note';
+      li.style.gridTemplateColumns = '20px 1fr auto';
+
+      const glyph = document.createElement('span'); glyph.className = 'glyph'; glyph.textContent = '—'; li.appendChild(glyph);
+
+      const text = document.createElement('span'); text.className = 'text';
+      text.innerHTML = renderInlineMarkdown(item.text); li.appendChild(text);
+
+      const period = document.createElement('span'); period.className = 'done-period';
+      period.textContent = periodLabel(item);
+      li.appendChild(period);
+      ul.appendChild(li);
+    });
+    root.appendChild(ul);
+  });
 }
 
 function renderAll() {
   renderHeader(); renderDaily(); renderMonthly();
-  renderFuture(); renderCollections(); renderIndex(); renderDone(); renderSource();
+  renderCollections(); renderIndex(); renderDone(); renderNotes(); renderSource();
 }
 
 /* ---------- wiring ---------- */
@@ -1384,8 +1453,6 @@ function addMonthly() {
 document.getElementById('monthlyAdd').onclick = addMonthly;
 document.getElementById('monthlyInput').addEventListener('keydown', e => { if (e.key === 'Enter') addMonthly(); });
 
-document.getElementById('prevYear').onclick = () => { state.activeYear--; commit(); renderAll(); };
-document.getElementById('nextYear').onclick = () => { state.activeYear++; commit(); renderAll(); };
 
 function addToCollection() {
   if (!state.activeCollection) return;
