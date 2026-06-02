@@ -1316,65 +1316,59 @@ function renderNotes() {
   const root = document.getElementById('notesContent');
   root.innerHTML = '';
 
-  // Collect all notes from all buckets
+  function extractTags(text) {
+    return [...new Set((text.match(/#([a-zA-Z][a-zA-Z0-9_-]*)/g) || []).map(t => t.slice(1)))];
+  }
+  function itemSortKey(item) {
+    if (item.periodType === 'daily') return item.period;
+    if (item.periodType === 'monthly') return item.period + '-00';
+    return '0000-00-00';
+  }
+  function periodLabel(item) {
+    if (item.periodType === 'daily') {
+      const [y, m, d] = item.period.split('-').map(Number);
+      return new Date(y, m-1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    }
+    if (item.periodType === 'monthly') {
+      const [y, m] = item.period.split('-').map(Number);
+      return new Date(y, m-1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+    return item.period;
+  }
+
+  // Collect all notes, keeping a live reference to the original entry object
   const items = [];
   const collect = (bucket, periodType) => {
     Object.entries(bucket).forEach(([period, entries]) => {
       (entries || []).forEach(e => {
-        if (e.type === 'note') {
-          // Extract tags from text
-          const tags = [...new Set((e.text.match(/#([a-zA-Z][a-zA-Z0-9_-]*)/g) || []).map(t => t.slice(1)))];
-          items.push({ ...e, period, periodType, tags });
-        }
+        if (e.type === 'note') items.push({ entry: e, period, periodType });
       });
     });
   };
   collect(state.daily, 'daily');
   collect(state.monthly, 'monthly');
   collect(state.collections, 'collection');
-  Object.values(state.collections).forEach(() => {}); // already handled above
 
   if (!items.length) {
     const el = document.createElement('div'); el.className = 'empty';
     el.textContent = 'No notes yet.'; root.appendChild(el); return;
   }
 
-  // Build tag → items map; items with no tags go to '__none__'
+  // Build tag → items map (items with no tags → '__none__')
   const byTag = {};
   items.forEach(item => {
-    const tagList = item.tags.length ? item.tags : ['__none__'];
-    tagList.forEach(tag => {
-      if (!byTag[tag]) byTag[tag] = [];
-      byTag[tag].push(item);
-    });
+    const tags = extractTags(item.entry.text);
+    const tagList = tags.length ? tags : ['__none__'];
+    tagList.forEach(tag => { if (!byTag[tag]) byTag[tag] = []; byTag[tag].push(item); });
   });
 
-  // Sort: named tags alphabetically, '__none__' last
+  // Named tags alphabetically, '__none__' last
   const sortedTags = Object.keys(byTag).sort((a, b) => {
-    if (a === '__none__') return 1;
-    if (b === '__none__') return -1;
-    return a.localeCompare(b);
+    if (a === '__none__') return 1; if (b === '__none__') return -1; return a.localeCompare(b);
   });
-
-  function itemSortKey(item) {
-    if (item.periodType === 'daily') return item.period;
-    if (item.periodType === 'monthly') return item.period + '-00';
-    return '0000-00-00';
-  }
-
-  function periodLabel(item) {
-    if (item.periodType === 'daily') {
-      const [y, m, d] = item.period.split('-').map(Number);
-      return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-    }
-    if (item.periodType === 'monthly') {
-      const [y, m] = item.period.split('-').map(Number);
-      return new Date(y, m - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    }
-    return item.period;
-  }
 
   sortedTags.forEach(tag => {
+    // Reverse chronological within each tag group
     const tagItems = byTag[tag].slice().sort((a, b) => itemSortKey(b).localeCompare(itemSortKey(a)));
 
     // Tag header
@@ -1390,14 +1384,29 @@ function renderNotes() {
 
     const ul = document.createElement('ul'); ul.className = 'entry-list';
     tagItems.forEach(item => {
+      const entry = item.entry;
       const li = document.createElement('li');
       li.className = 'entry note';
       li.style.gridTemplateColumns = '20px 1fr auto';
 
       const glyph = document.createElement('span'); glyph.className = 'glyph'; glyph.textContent = '—'; li.appendChild(glyph);
 
+      // Editable text — same pattern as the main entry list
       const text = document.createElement('span'); text.className = 'text';
-      text.innerHTML = renderInlineMarkdown(item.text); li.appendChild(text);
+      text.contentEditable = 'true'; text.spellcheck = false;
+      text.innerHTML = renderInlineMarkdown(entry.text);
+      text.addEventListener('focus', () => {
+        text.textContent = entry.text;
+        const r = document.createRange(); r.selectNodeContents(text); r.collapse(false);
+        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      });
+      text.addEventListener('blur', () => {
+        const v = text.textContent.trim();
+        if (v && v !== entry.text) { entry.text = v; commit(); renderNotes(); return; }
+        text.innerHTML = renderInlineMarkdown(entry.text);
+      });
+      text.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); text.blur(); } });
+      li.appendChild(text);
 
       const period = document.createElement('span'); period.className = 'done-period';
       period.textContent = periodLabel(item);
