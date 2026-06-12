@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Journal</title>
+<script>
+  // Set theme before first paint to avoid a flash of the wrong theme
+  (function () {
+    try {
+      var p = JSON.parse(localStorage.getItem('bujo-served.prefs.v1') || '{}');
+      var t = p.theme || (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
+      document.documentElement.dataset.theme = t;
+    } catch (e) {}
+  })();
+</script>
 <style>
   :root {
     color-scheme: light;
@@ -11,9 +21,19 @@
     --ink: #111111; --ink-2: #444; --ink-3: #888; --ink-4: #c8c8c8;
     --line: #e8e8e8; --line-strong: #1a1a1a;
     --accent: #d65427; --accent-soft: #fbeae2; --done: #b0b0b0;
-    --commit: #4a6fa5; --commit-soft: #edf1f8;
+    --commit: #4a6fa5; --commit-soft: #edf1f8; --commit-soft-hover: #dde6f4;
+    --priority-soft: #fdf5f0; --priority-soft-hover: #fbeae2;
     --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
     --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #1a1816; --surface: #232120;
+    --ink: #ededea; --ink-2: #b8b4ae; --ink-3: #8a8580; --ink-4: #5a5650;
+    --line: #332f2c; --line-strong: #ededea;
+    --accent: #e8623a; --accent-soft: #3a261d; --done: #5a5650;
+    --commit: #7a9fd5; --commit-soft: #232b38; --commit-soft-hover: #2c3850;
+    --priority-soft: #2a201a; --priority-soft-hover: #352419;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { background: var(--bg); color: var(--ink); font-family: var(--sans); font-size: 14px; line-height: 1.5; -webkit-font-smoothing: antialiased; }
@@ -36,6 +56,8 @@
   .save-dot.linked { background: #5ba85b; }
   .save-dot.error { background: #d83b3b; }
   .file-pill { font-family: var(--mono); }
+  .theme-toggle { -webkit-app-region: no-drag; background: none; border: none; cursor: pointer; color: var(--ink-3); font-size: 13px; line-height: 1; padding: 2px; display: flex; align-items: center; transition: color 120ms; }
+  .theme-toggle:hover { color: var(--ink); }
 
   nav { display: flex; gap: 28px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin-bottom: 44px; }
   nav button { background: none; border: none; font: inherit; font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); cursor: pointer; padding: 12px 0; margin-bottom: -1px; border-bottom: 1px solid transparent; transition: color 120ms, border-color 120ms; }
@@ -79,10 +101,10 @@
   .entry.drop-above { border-top: 2px solid var(--accent); }
   .entry.drop-below { border-bottom-color: var(--accent); border-bottom-width: 2px; }
   .entry[draggable="true"] .num { cursor: grab; }
-  .entry.priority:not(.migrated) { background: #fdf5f0; }
-  .entry.priority:not(.migrated):hover { background: #fbeae2; }
+  .entry.priority:not(.migrated) { background: var(--priority-soft); }
+  .entry.priority:not(.migrated):hover { background: var(--priority-soft-hover); }
   .entry.commitment:not(.done):not(.cancelled):not(.migrated) { background: var(--commit-soft); }
-  .entry.commitment:not(.done):not(.cancelled):not(.migrated):hover { background: #dde6f4; }
+  .entry.commitment:not(.done):not(.cancelled):not(.migrated):hover { background: var(--commit-soft-hover); }
   .entry.commitment .glyph { color: var(--commit); }
   .entry.commitment.done .glyph, .entry.commitment.cancelled .glyph, .entry.commitment.migrated .glyph { color: var(--ink-4); }
   .entry.commitment.done .text, .entry.commitment.cancelled .text, .entry.commitment.migrated .text { color: var(--done); }
@@ -187,6 +209,8 @@
   .entry .text strong { font-weight: 600; }
   .entry .text em { font-style: italic; }
   .tag-pill { display: inline-block; font-size: 10px; font-weight: 500; letter-spacing: 0.03em; padding: 1px 6px 2px; border-radius: 3px; margin: 0 1px; vertical-align: middle; cursor: default; user-select: none; line-height: 1.4; }
+  .tag-filter-bar { display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 0 14px; }
+  .tag-pill.active { box-shadow: inset 0 0 0 1.5px currentColor; font-weight: 700; }
 
   .loading-overlay { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; background: var(--bg); z-index: 1000; font-family: var(--mono); font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase; color: var(--ink-3); }
   .loading-overlay.hidden { display: none; }
@@ -213,6 +237,7 @@
       <span id="todayStamp"></span>
       <span class="file-pill">⇄ journal.md</span>
       <span><span class="save-dot" id="saveDot"></span><span id="saveStatus">Idle</span></span>
+      <button class="theme-toggle" id="themeToggle" title="Toggle dark mode" aria-label="Toggle dark mode"></button>
     </div>
   </header>
 
@@ -239,6 +264,7 @@
       </div>
     </div>
     <div id="migrateBanner"></div>
+    <div id="dailyTagBar"></div>
     <ul class="entry-list" id="dailyEntries"></ul>
     <div class="composer">
       <span class="spacer">+</span>
@@ -437,6 +463,8 @@ let visibleEntryIds = []; // populated by renderEntryList, used for up/down nav
 let writeTimer = null;
 let lastWrittenMd = '';
 let lastSeenMtime = 0;
+let dailyTagFilter = null;
+let doneTagFilter = null;
 let suppressPoll = false;
 
 /* ---------- date helpers ---------- */
@@ -500,10 +528,45 @@ const TAG_PALETTE = [
   { bg: '#f5f5e3', fg: '#5a5a20' },  // olive
   { bg: '#f8e8e3', fg: '#7a2a20' },  // red/rust
 ];
+const TAG_PALETTE_DARK = [
+  { bg: '#1f3320', fg: '#8fd18f' },  // green
+  { bg: '#1e2a44', fg: '#92b4ec' },  // blue
+  { bg: '#3a1f2e', fg: '#e89fc0' },  // pink
+  { bg: '#3a2818', fg: '#e0a878' },  // orange
+  { bg: '#2a1f3e', fg: '#c19fe0' },  // purple
+  { bg: '#15302f', fg: '#7fcaca' },  // teal
+  { bg: '#2e2e15', fg: '#cac07f' },  // olive
+  { bg: '#3a201a', fg: '#e09080' },  // red/rust
+];
 function tagColor(tag) {
   let h = 0;
   for (let i = 0; i < tag.length; i++) h = (Math.imul(31, h) + tag.charCodeAt(i)) | 0;
-  return TAG_PALETTE[Math.abs(h) % TAG_PALETTE.length];
+  const palette = document.documentElement.dataset.theme === 'dark' ? TAG_PALETTE_DARK : TAG_PALETTE;
+  return palette[Math.abs(h) % palette.length];
+}
+
+function tagsInEntries(entries) {
+  const tags = new Set();
+  (entries || []).forEach(e => {
+    (e.text.match(/#([a-zA-Z][a-zA-Z0-9_-]*)/g) || []).forEach(t => tags.add(t.slice(1)));
+  });
+  return [...tags].sort();
+}
+function renderTagFilterBar(container, tags, activeFilter, onSelect) {
+  container.innerHTML = '';
+  if (!tags.length) return;
+  const bar = document.createElement('div');
+  bar.className = 'tag-filter-bar';
+  tags.forEach(tag => {
+    const c = tagColor(tag);
+    const pill = document.createElement('span');
+    pill.className = 'tag-pill' + (tag === activeFilter ? ' active' : '');
+    pill.style.cssText = `background:${c.bg};color:${c.fg};cursor:pointer;font-size:11px;padding:2px 8px;`;
+    pill.textContent = '#' + tag;
+    pill.onclick = () => onSelect(tag === activeFilter ? null : tag);
+    bar.appendChild(pill);
+  });
+  container.appendChild(bar);
 }
 
 /* ---------- entry model ---------- */
@@ -757,7 +820,7 @@ function commit() { scheduleSave(); savePrefs(); }
 function savePrefs() {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify({
     view: state.view, activeDate: state.activeDate, activeMonth: state.activeMonth,
-    activeYear: state.activeYear, activeCollection: state.activeCollection
+    activeYear: state.activeYear, activeCollection: state.activeCollection, theme: currentTheme
   })); } catch {}
 }
 function loadPrefs() {
@@ -768,7 +831,27 @@ function loadPrefs() {
     if (p.activeMonth) state.activeMonth = p.activeMonth;
     if (p.activeYear) state.activeYear = p.activeYear;
     if (p.activeCollection) state.activeCollection = p.activeCollection;
+    if (p.theme) currentTheme = p.theme;
   } catch {}
+}
+
+let currentTheme = (() => {
+  try {
+    const p = JSON.parse(localStorage.getItem(PREFS_KEY) || '{}');
+    if (p.theme) return p.theme;
+  } catch {}
+  return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+})();
+function applyTheme() {
+  document.documentElement.dataset.theme = currentTheme;
+  const btn = document.getElementById('themeToggle');
+  if (btn) btn.textContent = currentTheme === 'dark' ? '☀' : '☾';
+}
+function toggleTheme() {
+  currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+  applyTheme();
+  savePrefs();
+  renderAll();
 }
 
 /* ---------- render ---------- */
@@ -1039,9 +1122,19 @@ function renderDaily() {
   document.getElementById('datePicker').value = state.activeDate;
   const list = state.daily[state.activeDate] || [];
   renderDailySummary(list);
-  renderEntryList(document.getElementById('dailyEntries'), list, {
-    emptyMsg: 'A blank day.',
-    reorderable: true,
+
+  const allTags = tagsInEntries(list);
+  renderTagFilterBar(document.getElementById('dailyTagBar'), allTags, dailyTagFilter, tag => {
+    dailyTagFilter = tag; renderDaily();
+  });
+
+  const filtered = dailyTagFilter
+    ? list.filter(e => (e.text.match(/#([a-zA-Z][a-zA-Z0-9_-]*)/g) || []).map(t => t.slice(1)).includes(dailyTagFilter))
+    : list;
+
+  renderEntryList(document.getElementById('dailyEntries'), filtered, {
+    emptyMsg: dailyTagFilter ? `No entries tagged #${dailyTagFilter} today.` : 'A blank day.',
+    reorderable: !dailyTagFilter,
     primary: true,
     onMigrate: (entry) => {
       entry.status = 'migrated';
@@ -1253,6 +1346,18 @@ function renderDone() {
     el.textContent = 'No completed tasks yet.'; root.appendChild(el); return;
   }
 
+  // Tag filter bar
+  const filterBarEl = document.createElement('div');
+  root.appendChild(filterBarEl);
+  const allTags = tagsInEntries(items.map(i => ({ text: i.text })));
+  renderTagFilterBar(filterBarEl, allTags, doneTagFilter, tag => {
+    doneTagFilter = tag; renderDone();
+  });
+
+  const visibleItems = doneTagFilter
+    ? items.filter(i => (i.text.match(/#([a-zA-Z][a-zA-Z0-9_-]*)/g) || []).map(t => t.slice(1)).includes(doneTagFilter))
+    : items;
+
   // Derive a sortable month key and display label per item
   function itemMonthKey(item) {
     if (item.periodType === 'daily') return item.period.slice(0, 7);
@@ -1267,7 +1372,7 @@ function renderDone() {
 
   // Group by month
   const byMonth = {};
-  items.forEach(item => {
+  visibleItems.forEach(item => {
     const mk = itemMonthKey(item);
     if (!byMonth[mk]) byMonth[mk] = [];
     byMonth[mk].push(item);
@@ -1425,6 +1530,7 @@ function renderAll() {
 
 /* ---------- wiring ---------- */
 document.querySelectorAll('.nav-btn').forEach(b => b.onclick = () => setView(b.dataset.view));
+document.getElementById('themeToggle').onclick = toggleTheme;
 const titleEl = document.getElementById('journalTitle');
 titleEl.addEventListener('blur', e => {
   const v = e.target.textContent.trim();
@@ -1433,10 +1539,10 @@ titleEl.addEventListener('blur', e => {
 });
 titleEl.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } });
 
-document.getElementById('prevDay').onclick = () => { state.activeDate = shiftDay(state.activeDate, -1); commit(); renderAll(); };
-document.getElementById('nextDay').onclick = () => { state.activeDate = shiftDay(state.activeDate, 1); commit(); renderAll(); };
-document.getElementById('todayBtn').onclick = () => { state.activeDate = todayISO(); commit(); renderAll(); };
-document.getElementById('datePicker').onchange = e => { state.activeDate = e.target.value; commit(); renderAll(); };
+document.getElementById('prevDay').onclick = () => { dailyTagFilter = null; state.activeDate = shiftDay(state.activeDate, -1); commit(); renderAll(); };
+document.getElementById('nextDay').onclick = () => { dailyTagFilter = null; state.activeDate = shiftDay(state.activeDate, 1); commit(); renderAll(); };
+document.getElementById('todayBtn').onclick = () => { dailyTagFilter = null; state.activeDate = todayISO(); commit(); renderAll(); };
+document.getElementById('datePicker').onchange = e => { dailyTagFilter = null; state.activeDate = e.target.value; commit(); renderAll(); };
 
 function addDaily() {
   const i = document.getElementById('dailyInput');
@@ -1693,6 +1799,7 @@ async function init() {
     }
     lastSeenMtime = await fetchMtime();
     loadPrefs();
+    applyTheme();
     setView(state.view || 'daily');
     renderAll();
     setStatus('linked', 'Synced');
