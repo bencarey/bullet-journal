@@ -65,6 +65,10 @@
   nav button { background: none; border: none; font: inherit; font-size: 11px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; color: var(--ink-3); cursor: pointer; padding: 12px 0; margin-bottom: -1px; border-bottom: 1px solid transparent; transition: color 120ms, border-color 120ms; }
   nav button:hover { color: var(--ink); }
   nav button.active { color: var(--ink); border-bottom-color: var(--accent); }
+  nav button[draggable="true"] { cursor: grab; }
+  nav button.nav-dragging { opacity: 0.35; }
+  nav button.nav-drop-before { box-shadow: inset 2px 0 0 var(--accent); }
+  nav button.nav-drop-after { box-shadow: inset -2px 0 0 var(--accent); }
 
   .view { display: none; }
   .view.active { display: block; }
@@ -824,7 +828,8 @@ function commit() { scheduleSave(); savePrefs(); }
 function savePrefs() {
   try { localStorage.setItem(PREFS_KEY, JSON.stringify({
     view: state.view, activeDate: state.activeDate, activeMonth: state.activeMonth,
-    activeYear: state.activeYear, activeCollection: state.activeCollection, theme: currentTheme
+    activeYear: state.activeYear, activeCollection: state.activeCollection, theme: currentTheme,
+    navOrder: [...document.querySelectorAll('.nav-btn')].map(b => b.dataset.view)
   })); } catch {}
 }
 function loadPrefs() {
@@ -836,7 +841,17 @@ function loadPrefs() {
     if (p.activeYear) state.activeYear = p.activeYear;
     if (p.activeCollection) state.activeCollection = p.activeCollection;
     if (p.theme) currentTheme = p.theme;
+    if (Array.isArray(p.navOrder)) applyNavOrder(p.navOrder);
   } catch {}
+}
+function applyNavOrder(order) {
+  const nav = document.querySelector('nav');
+  if (!nav) return;
+  const btns = {};
+  nav.querySelectorAll('.nav-btn').forEach(b => { btns[b.dataset.view] = b; });
+  order.forEach(v => { if (btns[v]) nav.appendChild(btns[v]); });
+  // any tabs not in the saved order (e.g. newly added) go last, original order
+  nav.querySelectorAll('.nav-btn').forEach(b => { if (!order.includes(b.dataset.view)) nav.appendChild(b); });
 }
 
 let currentTheme = (() => {
@@ -1557,6 +1572,46 @@ function renderAll() {
 /* ---------- wiring ---------- */
 document.querySelectorAll('.nav-btn').forEach(b => b.onclick = () => setView(b.dataset.view));
 document.getElementById('themeToggle').onclick = toggleTheme;
+
+// Drag-to-reorder nav tabs
+let navDragEl = null;
+function clearNavDropMarkers() {
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('nav-drop-before','nav-drop-after'));
+}
+function setupNavDrag() {
+  document.querySelectorAll('.nav-btn').forEach(btn => {
+    btn.draggable = true;
+    btn.addEventListener('dragstart', e => {
+      navDragEl = btn; btn.classList.add('nav-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', btn.dataset.view); } catch {}
+    });
+    btn.addEventListener('dragend', () => {
+      btn.classList.remove('nav-dragging'); clearNavDropMarkers(); navDragEl = null;
+    });
+    btn.addEventListener('dragover', e => {
+      if (!navDragEl || navDragEl === btn) return;
+      e.preventDefault(); e.dataTransfer.dropEffect = 'move';
+      const rect = btn.getBoundingClientRect();
+      const before = e.clientX < rect.left + rect.width / 2;
+      clearNavDropMarkers();
+      btn.classList.add(before ? 'nav-drop-before' : 'nav-drop-after');
+    });
+    btn.addEventListener('dragleave', e => {
+      if (!btn.contains(e.relatedTarget)) btn.classList.remove('nav-drop-before','nav-drop-after');
+    });
+    btn.addEventListener('drop', e => {
+      e.preventDefault();
+      if (!navDragEl || navDragEl === btn) { clearNavDropMarkers(); return; }
+      const rect = btn.getBoundingClientRect();
+      const before = e.clientX < rect.left + rect.width / 2;
+      btn.parentElement.insertBefore(navDragEl, before ? btn : btn.nextSibling);
+      clearNavDropMarkers();
+      savePrefs();
+    });
+  });
+}
+setupNavDrag();
 
 // Cmd/Ctrl+N → jump to the active view's "new entry" line (falls back to Daily)
 document.addEventListener('keydown', e => {
