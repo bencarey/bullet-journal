@@ -807,23 +807,17 @@ function fmt(e) {
    otherwise a localStorage-only fallback so the app still runs offline.
    All three return the same shape as before: read()->md, write(md), version()->number */
 const StorageBackend = (() => {
-  // --- Desktop: Electron file I/O ---
-  if (window.electronAPI && window.electronAPI.readJournal) {
-    return {
-      name: 'electron',
-      read:    () => window.electronAPI.readJournal(),
-      write:   (md) => window.electronAPI.writeJournal(md),
-      version: () => window.electronAPI.getJournalMtime(),
-    };
-  }
-
   const CACHE_KEY = 'bujo.journal.md';
   const VER_KEY   = 'bujo.journal.ver';
   const readCache  = () => localStorage.getItem(CACHE_KEY) || '';
   const writeCache = (md) => { try { localStorage.setItem(CACHE_KEY, md); } catch {} };
   const cfg = (window.JOURNAL_CONFIG && window.JOURNAL_CONFIG.supabase) || null;
+  // Mirror cloud writes back to the local journal.md when running in Electron,
+  // so the Google Drive file stays a live, human-readable backup.
+  const mirrorLocal = (md) => { try { if (window.electronAPI && window.electronAPI.writeJournal) window.electronAPI.writeJournal(md).catch(() => {}); } catch {} };
 
-  // --- Browser/PWA: Supabase-backed (auth + offline cache) ---
+  // --- Supabase-backed (auth + offline cache). Preferred whenever configured,
+  //     on desktop and browser alike, so all devices share one journal. ---
   if (cfg && cfg.url && cfg.key) {
     const root = cfg.url.replace(/\/$/, '');
     const authBase = root + '/auth/v1';
@@ -909,6 +903,7 @@ const StorageBackend = (() => {
         }
         const rows = await r.json();
         if (rows && rows[0]) lastVer = Date.parse(rows[0].updated_at) || lastVer;
+        mirrorLocal(md); // keep the local journal.md current on desktop
         return true;
       },
       async version() {
@@ -922,7 +917,17 @@ const StorageBackend = (() => {
     };
   }
 
-  // --- Browser/PWA: no backend yet → local-only (single device, offline) ---
+  // --- Desktop without cloud config: local journal.md ---
+  if (window.electronAPI && window.electronAPI.readJournal) {
+    return {
+      name: 'electron',
+      read:    () => window.electronAPI.readJournal(),
+      write:   (md) => window.electronAPI.writeJournal(md),
+      version: () => window.electronAPI.getJournalMtime(),
+    };
+  }
+
+  // --- Browser with no config → local-only (single device, offline) ---
   let ver = Number(localStorage.getItem(VER_KEY) || 0);
   return {
     name: 'local',
@@ -2103,10 +2108,31 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 }
 
 /* ---------- init ---------- */
+// One-time: on the first cloud launch in the desktop app, push the existing
+// local journal.md up to Supabase, then never again on this device.
+async function maybeMigrateLocalToCloud() {
+  if (StorageBackend.name !== 'supabase') return;
+  if (!(window.electronAPI && window.electronAPI.readJournal)) return;
+  const FLAG = 'bujo.migrated.electron.v1';
+  if (localStorage.getItem(FLAG)) return;
+  try {
+    const localMd = await window.electronAPI.readJournal();
+    if (localMd && localMd.trim()) {
+      setStatus('dirty', 'Migrating…');
+      await pushMd(localMd);
+      toast('Migrated your local journal to the cloud');
+    }
+    localStorage.setItem(FLAG, '1');
+  } catch (e) {
+    console.error('migration failed', e); // leave flag unset to retry next launch
+  }
+}
+
 async function startApp() {
   loadPrefs();
   setStatus('', 'Reading…');
   try {
+    await maybeMigrateLocalToCloud();
     const txt = await fetchMd();
     if (txt && txt.trim()) {
       state = parseMarkdown(txt);
