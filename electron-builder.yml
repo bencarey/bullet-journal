@@ -7,6 +7,10 @@ files:
   - preload.js
   - journal.html
   - package.json
+  - config.js
+  - manifest.json
+  - icon-192.png
+  - icon-512.png
 mac:
   icon: icon.icns
   target: dmg

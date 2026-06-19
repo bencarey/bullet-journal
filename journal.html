@@ -2,8 +2,16 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Journal</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1a1816" media="(prefers-color-scheme: dark)">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Journal">
+<link rel="apple-touch-icon" href="icon-192.png">
+<script src="config.js"></script>
 <script>
   // Set theme before first paint to avoid a flash of the wrong theme
   (function () {
@@ -759,10 +767,84 @@ function fmt(e) {
   return `- ${e.text}`;
 }
 
-/* ---------- Electron file I/O ---------- */
-async function fetchMd() { return window.electronAPI.readJournal(); }
-async function fetchMtime() { return window.electronAPI.getJournalMtime(); }
-async function pushMd(md) { return window.electronAPI.writeJournal(md); }
+/* ---------- storage backend ----------
+   Desktop (Electron): read/write the local journal.md, unchanged.
+   Browser/PWA: Supabase if configured (window.JOURNAL_CONFIG.supabase),
+   otherwise a localStorage-only fallback so the app still runs offline.
+   All three return the same shape as before: read()->md, write(md), version()->number */
+const StorageBackend = (() => {
+  // --- Desktop: Electron file I/O ---
+  if (window.electronAPI && window.electronAPI.readJournal) {
+    return {
+      name: 'electron',
+      read:    () => window.electronAPI.readJournal(),
+      write:   (md) => window.electronAPI.writeJournal(md),
+      version: () => window.electronAPI.getJournalMtime(),
+    };
+  }
+
+  const CACHE_KEY = 'bujo.journal.md';
+  const VER_KEY   = 'bujo.journal.ver';
+  const readCache  = () => localStorage.getItem(CACHE_KEY) || '';
+  const writeCache = (md) => { try { localStorage.setItem(CACHE_KEY, md); } catch {} };
+  const cfg = (window.JOURNAL_CONFIG && window.JOURNAL_CONFIG.supabase) || null;
+
+  // --- Browser/PWA: Supabase-backed (with offline cache) ---
+  if (cfg && cfg.url && cfg.key) {
+    const base = cfg.url.replace(/\/$/, '') + '/rest/v1/journal';
+    const authToken = () => cfg.token || cfg.key; // session token later; anon key for now
+    const headers = () => ({ apikey: cfg.key, Authorization: 'Bearer ' + authToken(), 'Content-Type': 'application/json' });
+    let lastVer = 0;
+    return {
+      name: 'supabase',
+      async read() {
+        try {
+          const r = await fetch(base + '?id=eq.main&select=content,updated_at', { headers: headers() });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const rows = await r.json();
+          if (rows && rows[0]) {
+            lastVer = Date.parse(rows[0].updated_at) || 0;
+            writeCache(rows[0].content || '');
+            return rows[0].content || '';
+          }
+          return readCache();
+        } catch (e) {
+          return readCache(); // offline → serve last-known
+        }
+      },
+      async write(md) {
+        writeCache(md); // optimistic local cache
+        const body = JSON.stringify([{ id: 'main', content: md, updated_at: new Date().toISOString() }]);
+        const r = await fetch(base, { method: 'POST', headers: { ...headers(), Prefer: 'resolution=merge-duplicates,return=representation' }, body });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const rows = await r.json();
+        if (rows && rows[0]) lastVer = Date.parse(rows[0].updated_at) || lastVer;
+        return true;
+      },
+      async version() {
+        try {
+          const r = await fetch(base + '?id=eq.main&select=updated_at', { headers: headers() });
+          if (!r.ok) return lastVer;
+          const rows = await r.json();
+          return (rows && rows[0]) ? (Date.parse(rows[0].updated_at) || 0) : lastVer;
+        } catch { return lastVer; }
+      },
+    };
+  }
+
+  // --- Browser/PWA: no backend yet → local-only (single device, offline) ---
+  let ver = Number(localStorage.getItem(VER_KEY) || 0);
+  return {
+    name: 'local',
+    read:    async () => readCache(),
+    write:   async (md) => { writeCache(md); ver = Date.now(); try { localStorage.setItem(VER_KEY, String(ver)); } catch {} return true; },
+    version: async () => ver,
+  };
+})();
+
+async function fetchMd()    { return StorageBackend.read(); }
+async function fetchMtime() { return StorageBackend.version(); }
+async function pushMd(md)   { return StorageBackend.write(md); }
 
 function setStatus(kind, label) {
   document.getElementById('saveDot').className = 'save-dot' + (kind ? ' ' + kind : '');
@@ -1921,6 +2003,11 @@ function toast(msg) {
 
 window.addEventListener('beforeunload', () => { if (writeTimer) saveNow(); });
 
+// Register the service worker for offline/installable PWA (browser only; no-op in Electron file://)
+if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
+  window.addEventListener('load', () => navigator.serviceWorker.register('sw.js').catch(() => {}));
+}
+
 /* ---------- init ---------- */
 async function init() {
   loadPrefs();
@@ -1943,7 +2030,7 @@ async function init() {
     renderAll();
     setStatus('linked', 'Synced');
     document.getElementById('loading').classList.add('hidden');
-    setInterval(pollForExternalChange, 4000);
+    setInterval(pollForExternalChange, StorageBackend.name === 'electron' ? 4000 : 8000);
   } catch (err) {
     console.error(err);
     setStatus('error', 'Load failed');
