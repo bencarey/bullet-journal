@@ -263,9 +263,13 @@
     .pager { flex-wrap: wrap; }
     .pager input[type="date"], .pager input[type="month"] { margin-left: 0; }
 
-    /* Entry rows: tighter, and reveal actions (no hover on touch) */
-    .entry { gap: 8px; }
+    /* Entry rows: tighter. Actions overlay the right edge instead of
+       occupying a grid column (which was crushing the text to 1 word/line).
+       They surface when you tap into the row. */
+    .entry { gap: 8px; position: relative; }
     .entry .num { font-size: 9px; }
+    .entry .actions { position: absolute; right: 0; top: 0; height: 100%; align-items: center; padding-left: 14px; background: var(--surface); border-radius: 4px; z-index: 2; }
+    .entry:focus-within .actions, .entry.selected .actions { opacity: 1; }
 
     /* Composer fits the width; the type select shrinks */
     .composer { padding: 12px; gap: 8px; grid-template-columns: 22px auto 1fr auto; }

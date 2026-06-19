@@ -1,7 +1,7 @@
 /* Bullet Journal service worker.
    HTML/navigation = network-first (so new deploys land immediately).
    Static assets = cache-first. Data API = always network. */
-const CACHE = 'bujo-shell-v2';
+const CACHE = 'bujo-shell-v3';
 const ASSETS = ['./', './journal.html', './manifest.json', './config.js', './icon-192.png', './icon-512.png'];
 
 self.addEventListener('install', e => {
