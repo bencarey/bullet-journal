@@ -29,7 +29,6 @@
     --ink: #111111; --ink-2: #444; --ink-3: #888; --ink-4: #c8c8c8;
     --line: #e8e8e8; --line-strong: #1a1a1a;
     --accent: #d65427; --accent-soft: #fbeae2; --done: #b0b0b0;
-    --commit: #4a6fa5; --commit-soft: #edf1f8; --commit-soft-hover: #dde6f4;
     --priority-soft: #fdf5f0; --priority-soft-hover: #fbeae2;
     --on-ink: #ffffff;
     --sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif;
@@ -41,7 +40,6 @@
     --ink: #ededea; --ink-2: #b8b4ae; --ink-3: #8a8580; --ink-4: #5a5650;
     --line: #332f2c; --line-strong: #ededea;
     --accent: #e8623a; --accent-soft: #3a261d; --done: #5a5650;
-    --commit: #7a9fd5; --commit-soft: #232b38; --commit-soft-hover: #2c3850;
     --priority-soft: #2a201a; --priority-soft-hover: #352419;
     --on-ink: #1a1816;
   }
@@ -119,23 +117,6 @@
   .entry .star { text-align: center; font-family: var(--sans); font-size: 14px; line-height: 1; padding-top: 1px; color: var(--ink-4); opacity: 0.4; cursor: pointer; user-select: none; transition: color 120ms, opacity 120ms, transform 120ms; }
   .entry .star:hover { opacity: 1; color: var(--accent); transform: scale(1.18); }
   .entry.priority .star { color: var(--accent); opacity: 1; }
-  .entry.commitment:not(.done):not(.cancelled):not(.migrated) { background: var(--commit-soft); }
-  .entry.commitment:not(.done):not(.cancelled):not(.migrated):hover { background: var(--commit-soft-hover); }
-  .entry.commitment .glyph { color: var(--commit); }
-  .entry.commitment.done .glyph, .entry.commitment.cancelled .glyph, .entry.commitment.migrated .glyph { color: var(--ink-4); }
-  .entry.commitment.done .text, .entry.commitment.cancelled .text, .entry.commitment.migrated .text { color: var(--done); }
-  .commit-line { display: flex; align-items: baseline; flex-wrap: wrap; gap: 0; min-width: 0; }
-  .commit-tag { display: inline-flex; align-items: center; gap: 3px; margin-left: 10px; opacity: 0; transition: opacity 100ms; flex-shrink: 0; }
-  .commit-tag.has-value { opacity: 1; }
-  .entry:hover .commit-tag,
-  .entry.selected .commit-tag { opacity: 1; }
-  .commit-tag-label { font-size: 9px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-4); user-select: none; }
-  .commit-tag-input { background: none; border: none; border-bottom: 1px solid transparent; font-family: var(--mono); font-size: 11px; color: var(--commit); outline: none; padding: 0 2px; transition: border-color 100ms, color 100ms; min-width: 3ch; }
-  .commit-tag-input:hover { border-bottom-color: var(--line-strong); }
-  .commit-tag-input:focus { border-bottom-color: var(--commit); color: var(--ink); }
-  .commit-tag-input.overdue { color: var(--accent); }
-  .entry.commitment.done .commit-tag,
-  .entry.commitment.cancelled .commit-tag { opacity: 0.35 !important; }
   .entry.selected { background: var(--surface) !important; }
   .entry.selected .actions { opacity: 1; }
   .entry .actions { display: flex; gap: 12px; opacity: 0; transition: opacity 120ms; }
@@ -265,11 +246,19 @@
 
     /* Entry rows: tighter. Actions overlay the right edge instead of
        occupying a grid column (which was crushing the text to 1 word/line).
-       They surface when you tap into the row. */
+       Tap the row (not the text) to select it and surface the actions. */
     .entry { gap: 8px; position: relative; }
     .entry .num { font-size: 9px; }
+
+    /* Bigger, more legible editable text with a roomier tap target so the
+       caret is easy to place when editing on a phone. */
+    .entry .text { font-size: 16px; line-height: 1.5; padding: 6px 2px; margin: -6px -2px; }
+
     .entry .actions { position: absolute; right: 0; top: 0; height: 100%; align-items: center; padding-left: 14px; background: var(--surface); border-radius: 4px; z-index: 2; }
-    .entry:focus-within .actions, .entry.selected .actions { opacity: 1; }
+    .entry.selected .actions { opacity: 1; }
+    /* While editing the text, never let the actions overlay cover what
+       you're typing — they come back when the field loses focus. */
+    .entry .text:focus ~ .actions { opacity: 0; pointer-events: none; }
 
     /* Composer fits the width; the type select shrinks */
     .composer { padding: 12px; gap: 8px; grid-template-columns: 22px auto 1fr auto; }
@@ -330,7 +319,6 @@
         <option value="event">Event ○</option>
         <option value="note">Note —</option>
         <option value="priority">Priority ★</option>
-        <option value="commitment">Commitment ◆</option>
         <option value="inspiration">Idea !</option>
       </select>
       <input type="text" id="dailyInput" placeholder="Add an entry" autocomplete="off">
@@ -367,7 +355,6 @@
             <option value="event">Event ○</option>
             <option value="note">Note —</option>
             <option value="priority">Priority ★</option>
-        <option value="commitment">Commitment ◆</option>
           </select>
           <input type="text" id="monthlyInput" placeholder="Add to month" autocomplete="off">
           <button class="add" id="monthlyAdd">Add</button>
@@ -387,7 +374,6 @@
         <option value="note">Note —</option>
         <option value="event">Event ○</option>
         <option value="priority">Priority ★</option>
-        <option value="commitment">Commitment ◆</option>
       </select>
       <input type="text" id="collectionInput" placeholder="Add to collection" autocomplete="off">
       <button class="add" id="collectionAdd">Add</button>
@@ -451,7 +437,6 @@
       <div class="key-row"><span class="g">—</span><span>Note</span></div>
       <div class="key-row"><span class="g">★</span><span>Priority</span></div>
       <div class="key-row"><span class="g">!</span><span>Idea</span></div>
-      <div class="key-row"><span class="g" style="color:var(--commit)">◆</span><span>Commitment</span></div>
     </div>
 
     <div class="view-label" style="margin-bottom:10px;margin-top:28px">Inline formatting</div>
@@ -460,17 +445,6 @@
       <div class="key-row"><span class="g" style="font-size:11px;font-family:var(--mono)">*text*</span><span><em>Italic</em></span></div>
       <div class="key-row" style="grid-column:span 2"><span class="g" style="font-size:11px;font-family:var(--mono)">[label](url)</span><span>Link — e.g. <code style="font-size:11px">[Google](https://google.com)</code></span></div>
       <div class="key-row" style="grid-column:span 2"><span class="g" style="font-size:11px;font-family:var(--mono)">#tag</span><span>Tag — e.g. <span id="keyTagExample"></span> — each unique tag gets a consistent color</span></div>
-    </div>
-
-    <div class="view-label" style="margin-bottom:10px;margin-top:28px">Commitment fields</div>
-    <p class="key-desc">Commitments carry an optional <strong>→ person</strong> and <strong>due date</strong> — shown inline after the text. Fields appear on hover; always visible when set. Click the due field and type in plain language:</p>
-    <div class="key-block">
-      <div class="key-row"><span class="g" style="font-size:11px;font-family:var(--mono)">today</span><span>Today's date</span></div>
-      <div class="key-row"><span class="g" style="font-size:11px;font-family:var(--mono)">tomorrow</span><span>Tomorrow</span></div>
-      <div class="key-row"><span class="g" style="font-size:11px;font-family:var(--mono)">friday</span><span>Next occurrence of a weekday</span></div>
-      <div class="key-row"><span class="g" style="font-size:11px;font-family:var(--mono)">3d / 2w</span><span>N days or weeks from today</span></div>
-      <div class="key-row"><span class="g" style="font-size:11px;font-family:var(--mono)">eom</span><span>End of month</span></div>
-      <div class="key-row"><span class="g" style="font-size:11px;font-family:var(--mono)">next week</span><span>Start of next week</span></div>
     </div>
 
     <div class="view-label" style="margin-bottom:10px;margin-top:28px">Keyboard shortcuts</div>
@@ -535,46 +509,6 @@ function prettyDateFull(iso) { const [y,m,d]=iso.split('-').map(Number); return 
 function prettyMonth(iso) { const [y,m]=iso.split('-').map(Number); return new Date(y,m-1,1).toLocaleDateString('en-US',{month:'long',year:'numeric'}); }
 function shiftDay(iso, d) { const [y,m,da]=iso.split('-').map(Number); const x=new Date(y,m-1,da); x.setDate(x.getDate()+d); return `${x.getFullYear()}-${pad(x.getMonth()+1)}-${pad(x.getDate())}`; }
 function shiftMonth(iso, n) { const [y,m]=iso.split('-').map(Number); const x=new Date(y,m-1,1); x.setMonth(x.getMonth()+n); return `${x.getFullYear()}-${pad(x.getMonth()+1)}`; }
-function isoFromDate(d) { return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; }
-function parseNaturalDate(input) {
-  const s = input.trim().toLowerCase();
-  if (!s) return '';
-  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const today = new Date(); today.setHours(0,0,0,0);
-  if (s === 'today') return isoFromDate(today);
-  if (s === 'tomorrow' || s === 'tmrw' || s === 'tom') { const d=new Date(today); d.setDate(d.getDate()+1); return isoFromDate(d); }
-  if (s === 'yesterday') { const d=new Date(today); d.setDate(d.getDate()-1); return isoFromDate(d); }
-  if (s === 'next week') { const d=new Date(today); d.setDate(d.getDate()+(8-d.getDay())%7||7); return isoFromDate(d); }
-  if (s === 'eom' || s === 'end of month') { return isoFromDate(new Date(today.getFullYear(), today.getMonth()+1, 0)); }
-  const dm = s.match(/^(\d+)\s*d(?:ays?)?$/); if (dm) { const d=new Date(today); d.setDate(d.getDate()+parseInt(dm[1])); return isoFromDate(d); }
-  const wm = s.match(/^(\d+)\s*w(?:eeks?)?$/); if (wm) { const d=new Date(today); d.setDate(d.getDate()+parseInt(wm[1])*7); return isoFromDate(d); }
-  const dayNames = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
-  const shortDays = ['sun','mon','tue','wed','thu','fri','sat'];
-  const isNext = s.startsWith('next ');
-  const sClean = isNext ? s.slice(5) : s;
-  let dayIdx = dayNames.indexOf(sClean);
-  if (dayIdx === -1) dayIdx = shortDays.indexOf(sClean.slice(0,3));
-  if (dayIdx !== -1) {
-    const d = new Date(today);
-    let diff = (dayIdx - d.getDay() + 7) % 7;
-    if (diff === 0 || isNext) diff += 7;
-    d.setDate(d.getDate() + diff);
-    return isoFromDate(d);
-  }
-  return '';
-}
-function formatDueDisplay(iso) {
-  if (!iso) return '';
-  const [y,m,d] = iso.split('-').map(Number);
-  const date = new Date(y, m-1, d);
-  const today = new Date(); today.setHours(0,0,0,0);
-  const diff = Math.round((date - today) / 86400000);
-  if (diff === 0) return 'today';
-  if (diff === 1) return 'tomorrow';
-  if (diff === -1) return 'yesterday';
-  if (diff > 1 && diff <= 6) return date.toLocaleDateString('en-US', { weekday: 'short' });
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
 
 /* ---------- tag colors ---------- */
 const TAG_PALETTE = [
@@ -647,6 +581,37 @@ function renderInlineMarkdown(text) {
   return s;
 }
 
+/* ---------- editable-text caret placement ----------
+   contentEditable swaps its rendered HTML for the raw text on focus, which
+   collapses the selection. Remember where the pointer last went down so we
+   can drop the caret there instead of jamming it to the end — this makes it
+   far easier to tap into the middle of an entry to fix a typo, especially
+   on a phone. Falls back to end-of-text for keyboard focus. */
+let lastEditPointer = null;
+function trackEditPointer(el) {
+  el.addEventListener('pointerdown', e => { lastEditPointer = { x: e.clientX, y: e.clientY }; });
+}
+function placeEditCaret(el) {
+  let range = null;
+  if (lastEditPointer) {
+    const { x, y } = lastEditPointer;
+    if (document.caretRangeFromPoint) {
+      const r = document.caretRangeFromPoint(x, y);
+      if (r && el.contains(r.startContainer)) range = r;
+    } else if (document.caretPositionFromPoint) {
+      const pos = document.caretPositionFromPoint(x, y);
+      if (pos && el.contains(pos.offsetNode)) {
+        range = document.createRange();
+        range.setStart(pos.offsetNode, pos.offset);
+        range.collapse(true);
+      }
+    }
+  }
+  if (!range) { range = document.createRange(); range.selectNodeContents(el); range.collapse(false); }
+  const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(range);
+  lastEditPointer = null;
+}
+
 function glyphFor(e) {
   if (e.type === 'task') {
     if (e.status === 'done') return '×';
@@ -654,12 +619,6 @@ function glyphFor(e) {
     if (e.status === 'migrated') return '>';
     if (e.status === 'scheduled') return '<';
     return '·';
-  }
-  if (e.type === 'commitment') {
-    if (e.status === 'done') return '×';
-    if (e.status === 'cancelled') return '~';
-    if (e.status === 'migrated') return '>';
-    return '◆';
   }
   if (e.type === 'event') return '○';
   if (e.type === 'note') return '—';
@@ -673,23 +632,27 @@ function glyphFor(e) {
   return '·';
 }
 function cycleStatus(e) {
-  if (e.type !== 'task' && e.type !== 'priority' && e.type !== 'commitment') return;
+  if (e.type !== 'task' && e.type !== 'priority') return;
   const order = ['open','done','cancelled','open'];
   e.status = order[order.indexOf(e.status || 'open') + 1];
 }
-function newEntry(type, text, status, extra = {}) {
+function newEntry(type, text, status) {
   return { id: Date.now()+Math.random().toString(36).slice(2,7),
     type, text: (text||'').trim(),
-    status: (type === 'task' || type === 'commitment') ? (status || 'open') : null,
-    ...(type === 'commitment' ? { to: extra.to || '', due: extra.due || '' } : {}) };
+    status: type === 'task' ? (status || 'open') : null };
 }
-function parseCommitmentText(raw) {
-  // extract trailing @person and due:YYYY-MM-DD tokens
+// Legacy commitments (◆) are no longer a type. Fold their optional
+// @person / due:date metadata back into readable plain text so nothing
+// is lost when an older journal.md is loaded.
+function foldCommitment(raw) {
   let text = raw.trim();
   let to = '', due = '';
   text = text.replace(/\s+due:(\d{4}-\d{2}-\d{2})/i, (_, d) => { due = d; return ''; });
   text = text.replace(/\s+@(\S+)$/, (_, p) => { to = p; return ''; });
-  return { text: text.trim(), to, due };
+  text = text.trim();
+  if (to) text += ` → ${to}`;
+  if (due) text += ` (due ${due})`;
+  return text;
 }
 
 /* ---------- markdown parse / serialize ---------- */
@@ -735,15 +698,14 @@ function parseMarkdown(md) {
       if (t[2].startsWith('★')) {
         const pe = newEntry('priority', t[2].replace(/^★\s*/, '')); pe.status = status; target.push(pe);
       } else if (t[2].startsWith('◆')) {
-        const p = parseCommitmentText(t[2].replace(/^◆\s*/, ''));
-        const ce = newEntry('commitment', p.text, status, { to: p.to, due: p.due }); target.push(ce);
+        target.push(newEntry('task', foldCommitment(t[2].replace(/^◆\s*/, '')), status));
       } else { target.push(newEntry('task', t[2], status)); }
       continue;
     }
     if (c.startsWith('○')) { target.push(newEntry('event', c.replace(/^○\s*/,''))); continue; }
     if (c.startsWith('—') || c.startsWith('–')) { target.push(newEntry('note', c.replace(/^[—–]\s*/,''))); continue; }
     if (c.startsWith('★')) { target.push(newEntry('priority', c.replace(/^★\s*/,''))); continue; }
-    if (c.startsWith('◆')) { const p = parseCommitmentText(c.replace(/^◆\s*/,'')); target.push(newEntry('commitment', p.text, 'open', { to: p.to, due: p.due })); continue; }
+    if (c.startsWith('◆')) { target.push(newEntry('task', foldCommitment(c.replace(/^◆\s*/,'')), 'open')); continue; }
     if (c.startsWith('!')) { target.push(newEntry('inspiration', c.replace(/^!\s*/,''))); continue; }
     target.push(newEntry('note', c));
   }
@@ -784,14 +746,6 @@ function fmt(e) {
     else if (e.status === 'cancelled') m = '~';
     else if (e.status === 'scheduled') m = '<';
     return `- [${m}] ${e.text}`;
-  }
-  if (e.type === 'commitment') {
-    const meta = [e.to ? `@${e.to}` : '', e.due ? `due:${e.due}` : ''].filter(Boolean).join(' ');
-    const body = meta ? `${e.text}  ${meta}` : e.text;
-    if (e.status === 'done') return `- [x] ◆ ${body}`;
-    if (e.status === 'cancelled') return `- [~] ◆ ${body}`;
-    if (e.status === 'migrated') return `- [>] ◆ ${body}`;
-    return `- ◆ ${body}`;
   }
   if (e.type === 'event') return `- ○ ${e.text}`;
   if (e.type === 'note') return `- — ${e.text}`;
@@ -1086,7 +1040,7 @@ function renderEntryList(ul, entries, opts = {}) {
     const glyph = document.createElement('span');
     glyph.className = 'glyph'; glyph.textContent = glyphFor(entry);
     glyph.onclick = (evt) => {
-      if (entry.type === 'task' || entry.type === 'priority' || entry.type === 'commitment') {
+      if (entry.type === 'task' || entry.type === 'priority') {
         cycleStatus(entry);
         if (entry.status === 'done') launchConfetti(evt.clientX, evt.clientY);
         commit(); renderAll();
@@ -1108,17 +1062,13 @@ function renderEntryList(ul, entries, opts = {}) {
       li.appendChild(star);
     }
 
-    // text column — for commitments wrap in a flex row so tags sit inline
-    const commitLine = entry.type === 'commitment' ? document.createElement('div') : null;
-    if (commitLine) { commitLine.className = 'commit-line'; li.appendChild(commitLine); }
-
     const text = document.createElement('span');
     text.className = 'text'; text.contentEditable = 'true'; text.spellcheck = false;
     text.innerHTML = renderInlineMarkdown(entry.text);
+    trackEditPointer(text);
     text.addEventListener('focus', () => {
       text.textContent = entry.text;
-      const r = document.createRange(); r.selectNodeContents(text); r.collapse(false);
-      const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+      placeEditCaret(text);
     });
     text.addEventListener('blur', () => {
       const v = text.textContent.trim();
@@ -1135,75 +1085,10 @@ function renderEntryList(ul, entries, opts = {}) {
         else window.open(url, '_blank');
       }
     });
-    if (commitLine) commitLine.appendChild(text); else li.appendChild(text);
+    li.appendChild(text);
 
-    if (entry.type === 'commitment') {
-      // Inline "→ who" tag
-      const toTag = document.createElement('span'); toTag.className = 'commit-tag';
-      if (entry.to) toTag.classList.add('has-value');
-      const toLabel = document.createElement('span'); toLabel.className = 'commit-tag-label'; toLabel.textContent = '→';
-      const toInput = document.createElement('input'); toInput.className = 'commit-tag-input';
-      toInput.type = 'text'; toInput.placeholder = 'who?'; toInput.autocomplete = 'off';
-      toInput.value = entry.to || '';
-      toInput.style.width = Math.max(entry.to ? entry.to.length : 0, 3) + 2 + 'ch';
-      toInput.addEventListener('focus', () => { toInput.style.width = Math.max(toInput.value.length, 3) + 2 + 'ch'; });
-      toInput.addEventListener('input', () => { toInput.style.width = Math.max(toInput.value.length, 3) + 2 + 'ch'; });
-      toInput.addEventListener('blur', () => {
-        entry.to = toInput.value.trim();
-        toTag.classList.toggle('has-value', !!entry.to);
-        toInput.style.width = Math.max(entry.to ? entry.to.length : 0, 3) + 2 + 'ch';
-        commit();
-      });
-      toInput.addEventListener('keydown', e => { if (e.key === 'Enter') toInput.blur(); if (e.key === 'Escape') { toInput.value = entry.to || ''; toInput.blur(); } });
-      toTag.appendChild(toLabel); toTag.appendChild(toInput);
-      commitLine.appendChild(toTag);
-
-      // Inline "due·date" tag
-      const dueTag = document.createElement('span'); dueTag.className = 'commit-tag';
-      if (entry.due) dueTag.classList.add('has-value');
-      const dueLabel = document.createElement('span'); dueLabel.className = 'commit-tag-label'; dueLabel.textContent = 'due';
-      const dueInput = document.createElement('input'); dueInput.className = 'commit-tag-input';
-      dueInput.type = 'text'; dueInput.autocomplete = 'off'; dueInput.spellcheck = false;
-      dueInput.placeholder = 'when?';
-      // display mode: human-readable
-      const updateDueDisplay = () => {
-        const display = formatDueDisplay(entry.due);
-        dueInput.value = display;
-        dueInput.style.width = Math.max(display.length, 4) + 1 + 'ch';
-        const today = new Date(); today.setHours(0,0,0,0);
-        if (entry.due) {
-          const [y,m,d] = entry.due.split('-').map(Number);
-          const diff = Math.round((new Date(y,m-1,d) - today) / 86400000);
-          dueInput.classList.toggle('overdue', diff < 0);
-        } else {
-          dueInput.classList.remove('overdue');
-          dueInput.style.width = '5ch';
-        }
-      };
-      updateDueDisplay();
-      dueInput.addEventListener('focus', () => {
-        // switch to natural-language editing
-        dueInput.value = entry.due || '';
-        dueInput.style.width = '10ch';
-        dueInput.select();
-      });
-      dueInput.addEventListener('input', () => { dueInput.style.width = Math.max(dueInput.value.length, 4) + 1 + 'ch'; });
-      dueInput.addEventListener('blur', () => {
-        const parsed = parseNaturalDate(dueInput.value);
-        entry.due = parsed || (dueInput.value.trim() === '' ? '' : entry.due);
-        dueTag.classList.toggle('has-value', !!entry.due);
-        updateDueDisplay();
-        commit();
-      });
-      dueInput.addEventListener('keydown', e => {
-        if (e.key === 'Enter') { e.preventDefault(); dueInput.blur(); }
-        if (e.key === 'Escape') { dueInput.value = entry.due || ''; dueInput.blur(); }
-      });
-      dueTag.appendChild(dueLabel); dueTag.appendChild(dueInput);
-      commitLine.appendChild(dueTag);
-    }
     const actions = document.createElement('span'); actions.className = 'actions';
-    if ((entry.type === 'task' || entry.type === 'priority' || entry.type === 'commitment') && !['done','cancelled','migrated','scheduled'].includes(entry.status)) {
+    if ((entry.type === 'task' || entry.type === 'priority') && !['done','cancelled','migrated','scheduled'].includes(entry.status)) {
       const schedBtn = document.createElement('button'); schedBtn.textContent = 'Schedule';
       schedBtn.onclick = e => {
         e.stopPropagation();
@@ -1231,27 +1116,26 @@ function renderEntryList(ul, entries, opts = {}) {
       };
       actions.appendChild(schedBtn);
     }
-    if ((entry.type === 'task' || entry.type === 'priority' || entry.type === 'commitment') && entry.status !== 'done' && entry.status !== 'cancelled' && opts.onMigrate) {
+    if ((entry.type === 'task' || entry.type === 'priority') && entry.status !== 'done' && entry.status !== 'cancelled' && opts.onMigrate) {
       const m = document.createElement('button'); m.textContent = 'Migrate';
       m.onclick = () => opts.onMigrate(entry, idx);
       actions.appendChild(m);
-    }
-    if ((entry.type === 'task' || entry.type === 'priority') && !['done','cancelled','migrated'].includes(entry.status)) {
-      const com = document.createElement('button'); com.textContent = '◆';
-      com.title = 'Mark as commitment'; com.style.color = 'var(--commit)';
-      com.onclick = () => { entry.type = 'commitment'; commit(); renderAll(); };
-      actions.appendChild(com);
-    }
-    if (entry.type === 'commitment' && !['done','cancelled','migrated'].includes(entry.status)) {
-      const uncom = document.createElement('button'); uncom.textContent = '◆';
-      uncom.title = 'Demote to task'; uncom.style.textDecoration = 'line-through'; uncom.style.color = 'var(--commit)';
-      uncom.onclick = () => { entry.type = 'task'; commit(); renderAll(); };
-      actions.appendChild(uncom);
     }
     const del = document.createElement('button'); del.textContent = 'Delete';
     del.onclick = () => { launchBurn(li, () => { entries.splice(idx, 1); commit(); renderAll(); }); };
     actions.appendChild(del);
     li.appendChild(actions);
+
+    // Tapping the row chrome (not the editable text or an interactive
+    // control) selects it — on touch this is how the actions surface,
+    // since there's no hover. Editing the text never selects the row,
+    // so the actions stay out of the way while typing.
+    li.addEventListener('click', e => {
+      if (e.target === li || e.target.classList.contains('num')) {
+        selectedEntryId = selectedEntryId === entry.id ? null : entry.id;
+        renderAll();
+      }
+    });
 
     if (opts.reorderable) {
       li.draggable = true;
@@ -1317,7 +1201,7 @@ function renderDailySummary(entries) {
   const priority = entries.filter(e => e.type === 'priority' && e.status !== 'migrated').length;
   const open     = entries.filter(e => e.type === 'task' && (!e.status || e.status === 'open')).length;
   const done     = entries.filter(e => e.type === 'task' && e.status === 'done').length;
-  const migrated = entries.filter(e => (e.type === 'task' || e.type === 'priority' || e.type === 'commitment') && e.status === 'migrated').length;
+  const migrated = entries.filter(e => (e.type === 'task' || e.type === 'priority') && e.status === 'migrated').length;
   const cancelled= entries.filter(e => e.type === 'task' && e.status === 'cancelled').length;
   const parts = [];
   if (priority)  parts.push(`<span style="color:var(--accent)">${priority} ${priority === 1 ? 'priority' : 'priorities'}</span>`);
@@ -1366,7 +1250,7 @@ function renderMigrateBanner() {
   let openCount = 0, oldest = null;
   for (const [d, entries] of Object.entries(state.daily)) {
     if (d >= today) continue;
-    const opens = entries.filter(e => (e.type === 'task' || e.type === 'priority' || e.type === 'commitment') && (!e.status || e.status === 'open'));
+    const opens = entries.filter(e => (e.type === 'task' || e.type === 'priority') && (!e.status || e.status === 'open'));
     if (opens.length) { openCount += opens.length; if (!oldest || d < oldest) oldest = d; }
   }
   if (!openCount) return;
@@ -1377,7 +1261,7 @@ function renderMigrateBanner() {
     for (const [d, entries] of Object.entries(state.daily)) {
       if (d >= today) continue;
       entries.forEach(e => {
-        if ((e.type === 'task' || e.type === 'priority' || e.type === 'commitment') && (!e.status || e.status === 'open')) {
+        if ((e.type === 'task' || e.type === 'priority') && (!e.status || e.status === 'open')) {
           e.status = 'migrated';
           state.daily[today] = state.daily[today] || [];
           state.daily[today].push(newEntry(e.type, e.text));
@@ -1773,10 +1657,10 @@ function renderNotes() {
       text.contentEditable = 'true'; text.spellcheck = false;
       text.style.color = 'var(--done)'; text.style.fontStyle = 'normal';
       text.innerHTML = renderInlineMarkdown(entry.text);
+      trackEditPointer(text);
       text.addEventListener('focus', () => {
         text.textContent = entry.text;
-        const r = document.createRange(); r.selectNodeContents(text); r.collapse(false);
-        const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(r);
+        placeEditCaret(text);
       });
       text.addEventListener('blur', () => {
         const v = text.textContent.trim();
