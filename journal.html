@@ -288,7 +288,7 @@
     </div>
     <div class="topbar-meta">
       <span id="todayStamp"></span>
-      <span class="file-pill">⇄ journal.md</span>
+      <span class="file-pill" id="filePill">⇄ journal.md</span>
       <span><span class="save-dot" id="saveDot"></span><span id="saveStatus">Idle</span></span>
       <button class="theme-toggle" id="themeToggle" title="Toggle dark mode" aria-label="Toggle dark mode"></button>
     </div>
@@ -840,6 +840,7 @@ const StorageBackend = (() => {
       isLoggedIn: () => !!(session && session.access_token),
       token: () => session && session.access_token,
       uid: () => session && session.access_token ? uidFromToken(session.access_token) : null,
+      email: () => (session && session.user && session.user.email) || null,
       async signIn(email, password) {
         const r = await fetch(authBase + '/token?grant_type=password', {
           method: 'POST',
@@ -2128,8 +2129,25 @@ async function maybeMigrateLocalToCloud() {
   }
 }
 
+function updateBackendBadge() {
+  const pill = document.getElementById('filePill');
+  if (!pill) return;
+  if (StorageBackend.name === 'supabase') {
+    const em = StorageBackend.auth && StorageBackend.auth.email && StorageBackend.auth.email();
+    pill.textContent = '☁ ' + (em || 'cloud');
+    pill.title = 'Synced to the cloud (Supabase)' + (em ? ' — ' + em : '');
+  } else if (StorageBackend.name === 'local') {
+    pill.textContent = '⌂ local';
+    pill.title = 'Local to this browser only';
+  } else {
+    pill.textContent = '⇄ journal.md';
+    pill.title = 'Local journal.md file';
+  }
+}
+
 async function startApp() {
   loadPrefs();
+  updateBackendBadge();
   setStatus('', 'Reading…');
   try {
     await maybeMigrateLocalToCloud();
