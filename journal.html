@@ -789,17 +789,62 @@ const StorageBackend = (() => {
   const writeCache = (md) => { try { localStorage.setItem(CACHE_KEY, md); } catch {} };
   const cfg = (window.JOURNAL_CONFIG && window.JOURNAL_CONFIG.supabase) || null;
 
-  // --- Browser/PWA: Supabase-backed (with offline cache) ---
+  // --- Browser/PWA: Supabase-backed (auth + offline cache) ---
   if (cfg && cfg.url && cfg.key) {
-    const base = cfg.url.replace(/\/$/, '') + '/rest/v1/journal';
-    const authToken = () => cfg.token || cfg.key; // session token later; anon key for now
-    const headers = () => ({ apikey: cfg.key, Authorization: 'Bearer ' + authToken(), 'Content-Type': 'application/json' });
+    const root = cfg.url.replace(/\/$/, '');
+    const authBase = root + '/auth/v1';
+    const base = root + '/rest/v1/journal';
+    const SESS_KEY = 'bujo.supabase.session';
+
+    let session = null;
+    try { session = JSON.parse(localStorage.getItem(SESS_KEY) || 'null'); } catch {}
+    const saveSession  = (s) => { session = s; try { localStorage.setItem(SESS_KEY, JSON.stringify(s)); } catch {} };
+    const clearSession = () => { session = null; try { localStorage.removeItem(SESS_KEY); } catch {} };
+    const uidFromToken = (t) => { try { return JSON.parse(atob(t.split('.')[1])).sub; } catch { return null; } };
+
+    const auth = {
+      isLoggedIn: () => !!(session && session.access_token),
+      token: () => session && session.access_token,
+      uid: () => session && session.access_token ? uidFromToken(session.access_token) : null,
+      async signIn(email, password) {
+        const r = await fetch(authBase + '/token?grant_type=password', {
+          method: 'POST',
+          headers: { apikey: cfg.key, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+        const data = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(data.error_description || data.msg || data.message || ('Login failed (' + r.status + ')'));
+        saveSession(data);
+        return data;
+      },
+      async refresh() {
+        if (!session || !session.refresh_token) return false;
+        const r = await fetch(authBase + '/token?grant_type=refresh_token', {
+          method: 'POST',
+          headers: { apikey: cfg.key, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ refresh_token: session.refresh_token })
+        });
+        if (!r.ok) { clearSession(); return false; }
+        saveSession(await r.json());
+        return true;
+      },
+      signOut() { clearSession(); }
+    };
+
+    const apiHeaders = () => ({ apikey: cfg.key, Authorization: 'Bearer ' + (auth.token() || cfg.key), 'Content-Type': 'application/json' });
+    async function apiFetch(url, build) {
+      let r = await fetch(url, build(apiHeaders()));
+      if (r.status === 401 && await auth.refresh()) r = await fetch(url, build(apiHeaders()));
+      return r;
+    }
+
     let lastVer = 0;
     return {
       name: 'supabase',
+      auth,
       async read() {
         try {
-          const r = await fetch(base + '?id=eq.main&select=content,updated_at', { headers: headers() });
+          const r = await apiFetch(base + '?select=content,updated_at', h => ({ headers: h }));
           if (!r.ok) throw new Error('HTTP ' + r.status);
           const rows = await r.json();
           if (rows && rows[0]) {
@@ -814,8 +859,10 @@ const StorageBackend = (() => {
       },
       async write(md) {
         writeCache(md); // optimistic local cache
-        const body = JSON.stringify([{ id: 'main', content: md, updated_at: new Date().toISOString() }]);
-        const r = await fetch(base, { method: 'POST', headers: { ...headers(), Prefer: 'resolution=merge-duplicates,return=representation' }, body });
+        const body = JSON.stringify([{ user_id: auth.uid(), content: md, updated_at: new Date().toISOString() }]);
+        const r = await apiFetch(base + '?on_conflict=user_id', h => ({
+          method: 'POST', headers: { ...h, Prefer: 'resolution=merge-duplicates,return=representation' }, body
+        }));
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const rows = await r.json();
         if (rows && rows[0]) lastVer = Date.parse(rows[0].updated_at) || lastVer;
@@ -823,7 +870,7 @@ const StorageBackend = (() => {
       },
       async version() {
         try {
-          const r = await fetch(base + '?id=eq.main&select=updated_at', { headers: headers() });
+          const r = await apiFetch(base + '?select=updated_at', h => ({ headers: h }));
           if (!r.ok) return lastVer;
           const rows = await r.json();
           return (rows && rows[0]) ? (Date.parse(rows[0].updated_at) || 0) : lastVer;
@@ -2009,7 +2056,7 @@ if ('serviceWorker' in navigator && location.protocol.startsWith('http')) {
 }
 
 /* ---------- init ---------- */
-async function init() {
+async function startApp() {
   loadPrefs();
   setStatus('', 'Reading…');
   try {
@@ -2034,8 +2081,62 @@ async function init() {
   } catch (err) {
     console.error(err);
     setStatus('error', 'Load failed');
-    document.getElementById('loading').textContent = 'Failed to load journal.md: ' + err.message;
+    document.getElementById('loading').textContent = 'Failed to load: ' + err.message;
   }
+}
+
+function showLogin(message) {
+  document.getElementById('loading').classList.add('hidden');
+  let ov = document.getElementById('loginOverlay');
+  if (!ov) {
+    ov = document.createElement('div');
+    ov.id = 'loginOverlay';
+    ov.style.cssText = 'position:fixed;inset:0;z-index:10000;display:flex;align-items:center;justify-content:center;background:var(--bg);padding:24px;';
+    ov.innerHTML = `
+      <form id="loginForm" style="width:100%;max-width:300px;display:flex;flex-direction:column;gap:14px;">
+        <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:6px;">
+          <div style="width:10px;height:10px;background:var(--accent);"></div>
+          <h1 style="font-size:13px;font-weight:600;letter-spacing:0.18em;text-transform:uppercase;color:var(--ink);">Journal</h1>
+        </div>
+        <input id="loginEmail" type="email" placeholder="Email" autocomplete="username" required
+          style="height:34px;border:1px solid var(--line);background:var(--surface);padding:0 10px;font:inherit;font-size:14px;color:var(--ink);outline:none;border-radius:5px;">
+        <input id="loginPass" type="password" placeholder="Password" autocomplete="current-password" required
+          style="height:34px;border:1px solid var(--line);background:var(--surface);padding:0 10px;font:inherit;font-size:14px;color:var(--ink);outline:none;border-radius:5px;">
+        <button type="submit" id="loginBtn"
+          style="height:34px;background:var(--ink);color:var(--on-ink);border:none;font:inherit;font-size:11px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;cursor:pointer;border-radius:5px;">Sign in</button>
+        <div id="loginMsg" style="font-size:12px;color:var(--ink-3);min-height:16px;text-align:center;"></div>
+      </form>`;
+    document.body.appendChild(ov);
+    ov.querySelector('#loginForm').addEventListener('submit', async e => {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      const msg = document.getElementById('loginMsg');
+      btn.disabled = true; msg.style.color = 'var(--ink-3)'; msg.textContent = 'Signing in…';
+      try {
+        await StorageBackend.auth.signIn(
+          document.getElementById('loginEmail').value.trim(),
+          document.getElementById('loginPass').value
+        );
+        ov.remove();
+        document.getElementById('loading').classList.remove('hidden');
+        await startApp();
+      } catch (err) {
+        msg.style.color = 'var(--accent)'; msg.textContent = err.message || 'Sign-in failed';
+        btn.disabled = false;
+      }
+    });
+  }
+  if (message) { const m = ov.querySelector('#loginMsg'); m.style.color = 'var(--ink-3)'; m.textContent = message; }
+  ov.style.display = 'flex';
+  setTimeout(() => { const el = document.getElementById('loginEmail'); if (el) el.focus(); }, 0);
+}
+
+async function init() {
+  if (StorageBackend.name === 'supabase' && !StorageBackend.auth.isLoggedIn()) {
+    showLogin();
+    return;
+  }
+  await startApp();
 }
 
 init();
