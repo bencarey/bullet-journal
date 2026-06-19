@@ -800,7 +800,13 @@ const StorageBackend = (() => {
     try { session = JSON.parse(localStorage.getItem(SESS_KEY) || 'null'); } catch {}
     const saveSession  = (s) => { session = s; try { localStorage.setItem(SESS_KEY, JSON.stringify(s)); } catch {} };
     const clearSession = () => { session = null; try { localStorage.removeItem(SESS_KEY); } catch {} };
-    const uidFromToken = (t) => { try { return JSON.parse(atob(t.split('.')[1])).sub; } catch { return null; } };
+    const uidFromToken = (t) => {
+      try {
+        let b = t.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+        b += '='.repeat((4 - b.length % 4) % 4); // restore base64 padding
+        return JSON.parse(atob(b)).sub;
+      } catch { return null; }
+    };
 
     const auth = {
       isLoggedIn: () => !!(session && session.access_token),
