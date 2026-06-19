@@ -18,3 +18,7 @@ create policy "own journal - insert" on public.journal
   for insert with check (auth.uid() = user_id);
 create policy "own journal - update" on public.journal
   for update using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- RLS gates rows, but the role still needs table privileges to reach it at all.
+-- (Supabase does NOT auto-grant for tables created via the raw SQL editor.)
+grant select, insert, update on public.journal to authenticated;
