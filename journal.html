@@ -311,7 +311,7 @@
     </div>
     <div id="migrateBanner"></div>
     <div id="dailyTagBar"></div>
-    <ul class="entry-list" id="dailyEntries"></ul>
+    <div id="dailyEntries"></div>
     <div class="composer">
       <span class="spacer">+</span>
       <select id="dailyType">
@@ -1016,8 +1016,12 @@ function toggleTheme() {
 
 /* ---------- render ---------- */
 function renderEntryList(ul, entries, opts = {}) {
+  // `entries` may be a filtered/partitioned view of a larger array; index-based
+  // mutations (delete, reorder) act on `backing` by entry identity so they hit
+  // the real underlying list rather than the temporary view.
+  const backing = opts.backing || entries;
   ul.innerHTML = '';
-  if (opts.primary) visibleEntryIds = []; // reset nav list for primary list only
+  if (opts.primary && !opts.keepNav) visibleEntryIds = []; // reset nav list for primary list only
   if (!entries || !entries.length) {
     const li = document.createElement('li'); li.className = 'empty';
     li.textContent = opts.emptyMsg || 'No entries.';
@@ -1122,7 +1126,11 @@ function renderEntryList(ul, entries, opts = {}) {
       actions.appendChild(m);
     }
     const del = document.createElement('button'); del.textContent = 'Delete';
-    del.onclick = () => { launchBurn(li, () => { entries.splice(idx, 1); commit(); renderAll(); }); };
+    del.onclick = () => { launchBurn(li, () => {
+      const ri = backing.indexOf(entry);
+      if (ri >= 0) backing.splice(ri, 1);
+      commit(); renderAll();
+    }); };
     actions.appendChild(del);
     li.appendChild(actions);
 
@@ -1141,7 +1149,7 @@ function renderEntryList(ul, entries, opts = {}) {
       li.draggable = true;
       li.addEventListener('dragstart', e => {
         e.dataTransfer.effectAllowed = 'move';
-        e.dataTransfer.setData('text/plain', String(idx));
+        e.dataTransfer.setData('text/plain', entry.id);
         requestAnimationFrame(() => li.classList.add('dragging'));
       });
       li.addEventListener('dragend', () => {
@@ -1161,12 +1169,14 @@ function renderEntryList(ul, entries, opts = {}) {
       li.addEventListener('drop', e => {
         e.preventDefault();
         ul.querySelectorAll('.drop-above,.drop-below').forEach(el => el.classList.remove('drop-above','drop-below'));
-        const fromIdx = parseInt(e.dataTransfer.getData('text/plain'));
+        const fromIdx = backing.findIndex(x => x.id === e.dataTransfer.getData('text/plain'));
+        const targetIdx = backing.indexOf(entry);
+        if (fromIdx < 0 || targetIdx < 0) return;
         const rect = li.getBoundingClientRect();
-        const insertBefore = e.clientY < rect.top + rect.height / 2 ? idx : idx + 1;
+        const insertBefore = e.clientY < rect.top + rect.height / 2 ? targetIdx : targetIdx + 1;
         if (fromIdx === insertBefore || fromIdx + 1 === insertBefore) return;
-        const [moved] = entries.splice(fromIdx, 1);
-        entries.splice(insertBefore > fromIdx ? insertBefore - 1 : insertBefore, 0, moved);
+        const [moved] = backing.splice(fromIdx, 1);
+        backing.splice(insertBefore > fromIdx ? insertBefore - 1 : insertBefore, 0, moved);
         commit(); renderAll();
       });
     }
@@ -1212,6 +1222,11 @@ function renderDailySummary(entries) {
   el.innerHTML = parts.join(' · ');
 }
 
+function dailyIsPersonal(e) {
+  return (e.text.match(/#([a-zA-Z][a-zA-Z0-9_-]*)/g) || [])
+    .some(t => t.slice(1).toLowerCase() === 'personal');
+}
+
 function renderDaily() {
   document.getElementById('dailyLabel').textContent = prettyDate(state.activeDate);
   document.getElementById('datePicker').value = state.activeDate;
@@ -1223,22 +1238,64 @@ function renderDaily() {
     dailyTagFilter = tag; renderDaily();
   });
 
-  const filtered = dailyTagFilter
-    ? list.filter(e => (e.text.match(/#([a-zA-Z][a-zA-Z0-9_-]*)/g) || []).map(t => t.slice(1)).includes(dailyTagFilter))
-    : list;
+  const container = document.getElementById('dailyEntries');
+  container.innerHTML = '';
 
-  renderEntryList(document.getElementById('dailyEntries'), filtered, {
-    emptyMsg: dailyTagFilter ? `No entries tagged #${dailyTagFilter} today.` : 'A blank day.',
-    reorderable: !dailyTagFilter,
-    primary: true,
-    onMigrate: (entry) => {
-      entry.status = 'migrated';
-      const t = shiftDay(state.activeDate, 1);
-      state.daily[t] = state.daily[t] || [];
-      state.daily[t].push(newEntry(entry.type, entry.text));
-      commit(); renderAll();
-    }
-  });
+  const onMigrate = (entry) => {
+    entry.status = 'migrated';
+    const t = shiftDay(state.activeDate, 1);
+    state.daily[t] = state.daily[t] || [];
+    state.daily[t].push(newEntry(entry.type, entry.text));
+    commit(); renderAll();
+  };
+
+  // While a tag filter is active, show a single flat list — the filter already
+  // narrows the view, so the Work/Personal split would be redundant.
+  if (dailyTagFilter) {
+    const filtered = list.filter(e =>
+      (e.text.match(/#([a-zA-Z][a-zA-Z0-9_-]*)/g) || []).map(t => t.slice(1)).includes(dailyTagFilter));
+    const ul = document.createElement('ul'); ul.className = 'entry-list';
+    container.appendChild(ul);
+    renderEntryList(ul, filtered, {
+      emptyMsg: `No entries tagged #${dailyTagFilter} today.`,
+      reorderable: false, primary: true, backing: list, onMigrate
+    });
+    renderMigrateBanner();
+    return;
+  }
+
+  // A blank day: one plain empty message, no section headers.
+  if (!list.length) {
+    const ul = document.createElement('ul'); ul.className = 'entry-list';
+    container.appendChild(ul);
+    renderEntryList(ul, [], { emptyMsg: 'A blank day.', primary: true, backing: list });
+    renderMigrateBanner();
+    return;
+  }
+
+  // Split into Work (the default) and Personal (#personal), rendered as
+  // Done-style grouped sections. Anything not tagged #personal is Work.
+  const personal = list.filter(dailyIsPersonal);
+  const work = list.filter(e => !dailyIsPersonal(e));
+
+  let first = true;
+  const section = (title, items) => {
+    if (!items.length) return;
+    const head = document.createElement('div');
+    head.style.cssText = `font-size:21px;font-weight:700;letter-spacing:-0.01em;color:var(--ink-3);padding:${first ? '6px' : '28px'} 0 10px;border-bottom:1px solid var(--line);margin-bottom:2px;`;
+    head.textContent = title;
+    container.appendChild(head);
+    const ul = document.createElement('ul'); ul.className = 'entry-list';
+    container.appendChild(ul);
+    renderEntryList(ul, items, {
+      reorderable: true, primary: true, keepNav: !first, backing: list, onMigrate
+    });
+    first = false;
+  };
+
+  section('Work', work);
+  section('Personal', personal);
+
   renderMigrateBanner();
 }
 
