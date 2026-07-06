@@ -4,3 +4,8 @@ dist/
 *.dmg
 *.asar
 .DS_Store
+
+# agent-sync local state (secrets / machine-specific)
+agent-sync/config.json
+agent-sync/.session.json
+agent-sync/.last-sync.json
