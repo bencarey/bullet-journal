@@ -125,14 +125,26 @@
   .entry .actions button:hover { color: var(--accent); }
   .empty { padding: 22px 0; color: var(--ink-3); font-size: 13px; }
 
-  .composer { display: grid; grid-template-columns: 28px auto 1fr auto; gap: 10px; align-items: center; margin-top: 30px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; }
-  .composer .spacer { font-family: var(--mono); font-size: 14px; font-weight: 600; color: var(--accent); text-align: center; }
-  .composer select { height: 30px; border: 1px solid var(--line); background: var(--bg); padding: 0 22px 0 10px; font: inherit; font-size: 11px; color: var(--ink); cursor: pointer; appearance: none; -webkit-appearance: none; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 10 10'%3E%3Cpath fill='%23888' d='M2 4l3 3 3-3z'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 8px center; }
-  .composer input[type="text"] { height: 30px; min-width: 0; border: none; border-bottom: 1px solid var(--line); background: transparent; padding: 0 4px; font: inherit; font-size: 14px; color: var(--ink); outline: none; }
-  .composer input[type="text"]:focus { border-bottom-color: var(--ink); }
-  .composer input[type="text"]::placeholder { color: var(--ink-4); }
-  .composer button.add { height: 30px; padding: 0 14px; background: var(--ink); color: var(--on-ink); border: none; font: inherit; font-size: 10px; font-weight: 500; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; transition: background 120ms; }
-  .composer button.add:hover { background: var(--accent); color: #ffffff; }
+  /* Command palette (⌘K) — quick add. Replaces the old bottom composer bars. */
+  .cmdk-bg { display: none; position: fixed; inset: 0; background: rgba(17,17,17,0.5); z-index: 200; align-items: flex-start; justify-content: center; }
+  .cmdk-bg.active { display: flex; }
+  .cmdk { margin-top: 14vh; background: var(--surface); width: 92%; max-width: 560px; border: 1px solid var(--line-strong); border-radius: 10px; box-shadow: 0 24px 60px rgba(0,0,0,0.28); overflow: hidden; }
+  .cmdk-head { display: flex; align-items: center; gap: 10px; padding: 15px 18px; border-bottom: 1px solid var(--line); }
+  .cmdk-spark { font-family: var(--mono); font-size: 18px; font-weight: 600; color: var(--accent); line-height: 1; }
+  .cmdk-head input { flex: 1; min-width: 0; border: none; background: transparent; font: inherit; font-size: 17px; color: var(--ink); outline: none; }
+  .cmdk-head input::placeholder { color: var(--ink-4); }
+  .cmdk-target { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .cmdk-types { display: flex; gap: 6px; padding: 12px 18px; flex-wrap: wrap; }
+  .cmdk-type { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font: inherit; font-size: 11px; color: var(--ink-2); cursor: pointer; transition: background 100ms, color 100ms, border-color 100ms; }
+  .cmdk-type:hover { border-color: var(--ink-3); color: var(--ink); }
+  .cmdk-type.active { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+  .cmdk-type .g { font-family: var(--mono); font-size: 12px; }
+  .cmdk-hint { display: flex; gap: 16px; padding: 10px 18px 13px; border-top: 1px solid var(--line); font-size: 10px; color: var(--ink-4); }
+  .cmdk-hint b { font-family: var(--mono); color: var(--ink-3); font-weight: 600; }
+  /* Floating add affordance (discoverability for the ⌘K palette) */
+  .cmdk-fab { position: fixed; right: 22px; bottom: 22px; z-index: 90; display: inline-flex; align-items: center; gap: 8px; height: 42px; padding: 0 16px; border: none; border-radius: 999px; background: var(--ink); color: var(--on-ink); font: inherit; font-size: 18px; line-height: 1; cursor: pointer; box-shadow: 0 6px 18px rgba(0,0,0,0.20); transition: background 120ms, color 120ms; }
+  .cmdk-fab .k { font-size: 10px; letter-spacing: 0.1em; opacity: 0.7; }
+  .cmdk-fab:hover { background: var(--accent); color: #ffffff; }
 
   .banner { display: flex; justify-content: space-between; align-items: center; gap: 14px; background: var(--accent-soft); border-left: 2px solid var(--accent); padding: 11px 14px; margin-bottom: 20px; font-size: 13px; color: var(--ink-2); }
   .banner button { background: var(--ink); color: var(--on-ink); border: none; padding: 5px 11px; font: inherit; font-size: 10px; letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
@@ -261,9 +273,9 @@
     .entry .text:focus ~ .actions { opacity: 0; pointer-events: none; }
 
     /* Composer fits the width; the type select shrinks */
-    .composer { padding: 12px; gap: 8px; grid-template-columns: 22px auto 1fr auto; }
-    .composer select { padding: 0 20px 0 8px; }
-    .composer button.add { padding: 0 12px; }
+    .cmdk-fab .k { display: none; }
+    .cmdk-fab { right: 16px; bottom: 16px; height: 48px; width: 48px; justify-content: center; padding: 0; font-size: 22px; }
+    .cmdk { margin-top: 8vh; }
   }
 </style>
 </head>
@@ -312,18 +324,6 @@
     <div id="migrateBanner"></div>
     <div id="dailyTagBar"></div>
     <div id="dailyEntries"></div>
-    <div class="composer">
-      <span class="spacer">+</span>
-      <select id="dailyType">
-        <option value="task">Task ·</option>
-        <option value="event">Event ○</option>
-        <option value="note">Note —</option>
-        <option value="priority">Priority ★</option>
-        <option value="inspiration">Idea !</option>
-      </select>
-      <input type="text" id="dailyInput" placeholder="Add an entry" autocomplete="off">
-      <button class="add" id="dailyAdd">Add</button>
-    </div>
   </section>
 
   <section class="view" id="view-monthly">
@@ -348,17 +348,6 @@
           <div class="panel-label" style="margin-top:20px;color:var(--ink-4)">From Future Log</div>
           <ul class="entry-list" id="monthlyFutureEntries"></ul>
         </div>
-        <div class="composer">
-          <span class="spacer">+</span>
-          <select id="monthlyType">
-            <option value="task">Task ·</option>
-            <option value="event">Event ○</option>
-            <option value="note">Note —</option>
-            <option value="priority">Priority ★</option>
-          </select>
-          <input type="text" id="monthlyInput" placeholder="Add to month" autocomplete="off">
-          <button class="add" id="monthlyAdd">Add</button>
-        </div>
       </div>
     </div>
   </section>
@@ -367,17 +356,6 @@
   <section class="view" id="view-collections">
     <div id="collectionTabs" class="collection-tabs"></div>
     <ul class="entry-list" id="collectionEntries"></ul>
-    <div class="composer" id="collectionAddRow" style="display:none">
-      <span class="spacer">+</span>
-      <select id="collectionType">
-        <option value="task">Task ·</option>
-        <option value="note">Note —</option>
-        <option value="event">Event ○</option>
-        <option value="priority">Priority ★</option>
-      </select>
-      <input type="text" id="collectionInput" placeholder="Add to collection" autocomplete="off">
-      <button class="add" id="collectionAdd">Add</button>
-    </div>
   </section>
 
   <section class="view" id="view-index">
@@ -459,6 +437,21 @@
   </section>
 
 </div>
+
+<!-- Command palette (⌘K) — quick add, replaces the old bottom composer bars -->
+<div class="cmdk-bg" id="cmdkBackdrop">
+  <div class="cmdk" role="dialog" aria-label="Quick add entry">
+    <div class="cmdk-head">
+      <span class="cmdk-spark">＋</span>
+      <input type="text" id="cmdkInput" placeholder="Add an entry…" autocomplete="off" spellcheck="false">
+      <span class="cmdk-target" id="cmdkTarget"></span>
+    </div>
+    <div class="cmdk-types" id="cmdkTypes"></div>
+    <div class="cmdk-hint"><span><b>↵</b> add</span><span><b>Tab</b> type</span><span><b>esc</b> close</span></div>
+  </div>
+</div>
+
+<button class="cmdk-fab" id="cmdkFab" title="Add entry (⌘K)" aria-label="Add entry">＋<span class="k">⌘K</span></button>
 
 <div class="modal-bg" id="modalBackdrop">
   <div class="modal">
@@ -1477,11 +1470,9 @@ function renderCollections() {
   tabBar.appendChild(addBtn);
 
   const ul = document.getElementById('collectionEntries');
-  const addRow = document.getElementById('collectionAddRow');
   if (!state.activeCollection || !state.collections[state.activeCollection]) {
-    ul.innerHTML = ''; addRow.style.display = 'none'; return;
+    ul.innerHTML = ''; return;
   }
-  addRow.style.display = '';
   renderEntryList(ul, state.collections[state.activeCollection], { emptyMsg: 'Empty collection.' });
 }
 
@@ -1786,11 +1777,96 @@ function setupNavDrag() {
 setupNavDrag();
 
 // Cmd/Ctrl+N → jump to the active view's "new entry" line (falls back to Daily)
+/* ---------- ⌘K quick-add palette ---------- */
+const CMDK_TYPES = [
+  { type: 'task',        label: 'Task',     g: '·' },
+  { type: 'priority',    label: 'Priority', g: '★' },
+  { type: 'event',       label: 'Event',    g: '○' },
+  { type: 'note',        label: 'Note',     g: '—' },
+  { type: 'inspiration', label: 'Idea',     g: '!' },
+];
+let cmdkType = 'task';
+
+function cmdkMonthLabel(m) {
+  const [y, mo] = m.split('-').map(Number);
+  return new Date(y, mo - 1, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+}
+
+// Where a new entry goes, based on the active view. Falls back to the current
+// day (which also covers non-add views like Done/Notes/Index/Source).
+function currentAddTarget() {
+  if (state.view === 'monthly') {
+    const m = state.activeMonth;
+    return { label: cmdkMonthLabel(m), add: (e) => { (state.monthly[m] = state.monthly[m] || []).push(e); } };
+  }
+  if (state.view === 'collections' && state.activeCollection && state.collections[state.activeCollection]) {
+    const c = state.activeCollection;
+    return { label: c, add: (e) => { state.collections[c].push(e); } };
+  }
+  const d = state.activeDate;
+  return { label: d === todayISO() ? 'Today' : d, view: 'daily', add: (e) => { (state.daily[d] = state.daily[d] || []).push(e); } };
+}
+
+function renderCmdkTypes() {
+  const wrap = document.getElementById('cmdkTypes');
+  wrap.innerHTML = '';
+  CMDK_TYPES.forEach(t => {
+    const b = document.createElement('button');
+    b.className = 'cmdk-type' + (t.type === cmdkType ? ' active' : '');
+    b.innerHTML = `<span class="g">${t.g}</span>${t.label}`;
+    b.onclick = () => { cmdkType = t.type; renderCmdkTypes(); document.getElementById('cmdkInput').focus(); };
+    wrap.appendChild(b);
+  });
+}
+
+function cmdkIsOpen() { return document.getElementById('cmdkBackdrop').classList.contains('active'); }
+
+function openCmdk() {
+  document.getElementById('cmdkTarget').textContent = '→ ' + currentAddTarget().label;
+  renderCmdkTypes();
+  document.getElementById('cmdkBackdrop').classList.add('active');
+  const inp = document.getElementById('cmdkInput');
+  inp.value = '';
+  setTimeout(() => inp.focus(), 0);
+}
+function closeCmdk() { document.getElementById('cmdkBackdrop').classList.remove('active'); }
+
+function cmdkCycleType(dir) {
+  const i = CMDK_TYPES.findIndex(t => t.type === cmdkType);
+  cmdkType = CMDK_TYPES[(i + dir + CMDK_TYPES.length) % CMDK_TYPES.length].type;
+  renderCmdkTypes();
+}
+
+// Enter adds and keeps the palette open for rapid capture (Esc to close).
+function cmdkAdd() {
+  const inp = document.getElementById('cmdkInput');
+  const v = inp.value.trim();
+  if (!v) return;
+  const tgt = currentAddTarget();
+  if (tgt.view && state.view !== tgt.view) setView(tgt.view);
+  tgt.add(newEntry(cmdkType, v));
+  inp.value = '';
+  commit(); renderAll();
+  document.getElementById('cmdkTarget').textContent = '→ ' + currentAddTarget().label + '  ·  added ✓';
+  inp.focus();
+}
+
+document.getElementById('cmdkInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); cmdkAdd(); }
+  else if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); closeCmdk(); }
+  else if (e.key === 'Tab') { e.preventDefault(); cmdkCycleType(e.shiftKey ? -1 : 1); }
+});
+document.getElementById('cmdkBackdrop').addEventListener('mousedown', e => {
+  if (e.target.id === 'cmdkBackdrop') closeCmdk();
+});
+document.getElementById('cmdkFab').onclick = openCmdk;
+
+// ⌘K (and ⌘N, the old shortcut) toggle the palette.
 document.addEventListener('keydown', e => {
-  if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n' && !e.shiftKey && !e.altKey) {
-    let inp = document.querySelector('.view.active .composer input[type="text"]');
-    if (!inp) { setView('daily'); inp = document.getElementById('dailyInput'); }
-    if (inp) { e.preventDefault(); inp.focus(); inp.select(); }
+  const k = e.key.toLowerCase();
+  if ((e.metaKey || e.ctrlKey) && (k === 'k' || k === 'n') && !e.shiftKey && !e.altKey) {
+    e.preventDefault();
+    cmdkIsOpen() ? closeCmdk() : openCmdk();
   }
 });
 const titleEl = document.getElementById('journalTitle');
@@ -1806,42 +1882,9 @@ document.getElementById('nextDay').onclick = () => { dailyTagFilter = null; stat
 document.getElementById('todayBtn').onclick = () => { dailyTagFilter = null; state.activeDate = todayISO(); commit(); renderAll(); };
 document.getElementById('datePicker').onchange = e => { dailyTagFilter = null; state.activeDate = e.target.value; commit(); renderAll(); };
 
-function addDaily() {
-  const i = document.getElementById('dailyInput');
-  const t = document.getElementById('dailyType').value;
-  const v = i.value.trim(); if (!v) return;
-  state.daily[state.activeDate] = state.daily[state.activeDate] || [];
-  state.daily[state.activeDate].push(newEntry(t, v));
-  i.value = ''; commit(); renderAll(); i.focus();
-}
-document.getElementById('dailyAdd').onclick = addDaily;
-document.getElementById('dailyInput').addEventListener('keydown', e => { if (e.key === 'Enter') addDaily(); });
-
 document.getElementById('prevMonth').onclick = () => { state.activeMonth = shiftMonth(state.activeMonth, -1); commit(); renderAll(); };
 document.getElementById('nextMonth').onclick = () => { state.activeMonth = shiftMonth(state.activeMonth, 1); commit(); renderAll(); };
 document.getElementById('monthPicker').onchange = e => { state.activeMonth = e.target.value; commit(); renderAll(); };
-function addMonthly() {
-  const i = document.getElementById('monthlyInput');
-  const t = document.getElementById('monthlyType').value;
-  const v = i.value.trim(); if (!v) return;
-  state.monthly[state.activeMonth] = state.monthly[state.activeMonth] || [];
-  state.monthly[state.activeMonth].push(newEntry(t, v));
-  i.value = ''; commit(); renderAll(); i.focus();
-}
-document.getElementById('monthlyAdd').onclick = addMonthly;
-document.getElementById('monthlyInput').addEventListener('keydown', e => { if (e.key === 'Enter') addMonthly(); });
-
-
-function addToCollection() {
-  if (!state.activeCollection) return;
-  const i = document.getElementById('collectionInput');
-  const t = document.getElementById('collectionType').value;
-  const v = i.value.trim(); if (!v) return;
-  state.collections[state.activeCollection].push(newEntry(t, v));
-  i.value = ''; commit(); renderAll(); i.focus();
-}
-document.getElementById('collectionAdd').onclick = addToCollection;
-document.getElementById('collectionInput').addEventListener('keydown', e => { if (e.key === 'Enter') addToCollection(); });
 
 document.getElementById('copySourceBtn').onclick = async () => {
   const md = serializeMarkdown(state);
