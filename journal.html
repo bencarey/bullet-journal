@@ -134,6 +134,8 @@
   .cmdk-head input { flex: 1; min-width: 0; border: none; background: transparent; font: inherit; font-size: 17px; color: var(--ink); outline: none; }
   .cmdk-head input::placeholder { color: var(--ink-4); }
   .cmdk-target { font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); white-space: nowrap; font-variant-numeric: tabular-nums; }
+  .cmdk-close { flex: none; width: 28px; height: 28px; border: none; background: transparent; color: var(--ink-4); font-size: 22px; line-height: 1; cursor: pointer; border-radius: 6px; }
+  .cmdk-close:hover { color: var(--accent); background: var(--bg); }
   .cmdk-types { display: flex; gap: 6px; padding: 12px 18px; flex-wrap: wrap; }
   .cmdk-type { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--bg); font: inherit; font-size: 11px; color: var(--ink-2); cursor: pointer; transition: background 100ms, color 100ms, border-color 100ms; }
   .cmdk-type:hover { border-color: var(--ink-3); color: var(--ink); }
@@ -445,6 +447,7 @@
       <span class="cmdk-spark">＋</span>
       <input type="text" id="cmdkInput" placeholder="Add an entry…" autocomplete="off" spellcheck="false">
       <span class="cmdk-target" id="cmdkTarget"></span>
+      <button class="cmdk-close" id="cmdkClose" aria-label="Close" title="Close">×</button>
     </div>
     <div class="cmdk-types" id="cmdkTypes"></div>
     <div class="cmdk-hint"><span><b>↵</b> add</span><span><b>Tab</b> type</span><span><b>esc</b> close</span></div>
@@ -1860,6 +1863,7 @@ document.getElementById('cmdkBackdrop').addEventListener('mousedown', e => {
   if (e.target.id === 'cmdkBackdrop') closeCmdk();
 });
 document.getElementById('cmdkFab').onclick = openCmdk;
+document.getElementById('cmdkClose').onclick = closeCmdk;
 
 // ⌘K (and ⌘N, the old shortcut) toggle the palette.
 document.addEventListener('keydown', e => {
